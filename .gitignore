@@ -1,0 +1,5 @@
+GPATH
+GRTAGS
+GTAGS
+/target
+**/*.rs.bk
