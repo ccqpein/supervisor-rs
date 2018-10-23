@@ -2,6 +2,7 @@
 name = "supervisor-rs"
 version = "0.1.0"
 authors = ["ccQ <ccq777@gmail.com>"]
-edition = "2018-10-21"
+edition = "2018"
 
 [dependencies]
+subprocess = "0.1.17"
