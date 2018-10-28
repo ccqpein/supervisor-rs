@@ -6,3 +6,4 @@ edition = "2018"
 
 [dependencies]
 #subprocess = "0.1.17"
+yaml-rust = "0.4"

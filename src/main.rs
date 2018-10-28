@@ -2,9 +2,13 @@
 use supervisor_rs::*;
 
 fn main() {
-    let temp = vec!["run", "~/Desktop/main.go"];
-    let a = Config::new("go", &temp, "/tmp/log");
-    start_new_subprocessing(&a);
-    println!("Hello, world!");
+    let bs = "
+Command:
+    - go
+Args:
+    - aa
+";
+    let b = Config::read_from_str(bs).unwrap();
+    println!("{:?}", b);
     loop {}
 }
