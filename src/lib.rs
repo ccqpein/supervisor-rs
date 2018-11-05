@@ -1,7 +1,8 @@
 use std::error::Error;
 use std::fs::File;
+use std::io;
 use std::io::prelude::*;
-use std::process::Command;
+use std::process::{Child, Command};
 use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
 
 #[derive(Debug)]
@@ -81,22 +82,21 @@ impl Config {
 }
 
 //:= MARK: need find a way to store process id, and handle stdout
-pub fn start_new_subprocessing(config: &Config) {
+pub fn start_new_child(config: &Config) -> io::Result<Child> {
     let (com, args) = config.split_args();
 
-    let mut child = Command::new(&com);
+    let mut command = Command::new(&com);
 
     match args {
         Some(arg) => {
-            child.args(arg.split(' ').collect::<Vec<&str>>());
+            command.args(arg.split(' ').collect::<Vec<&str>>());
         }
         _ => (),
     }
 
-    child
+    command
         .stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
         .spawn()
-        .expect("Cannot start a new child processing");
 }
 
 //:= MARK: take care all children in case they are stop running
