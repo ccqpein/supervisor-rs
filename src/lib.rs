@@ -100,4 +100,8 @@ pub fn start_new_child(config: &Config) -> io::Result<Child> {
 }
 
 //:= MARK: take care all children in case they are stop running
-fn watch_child() {}
+/*:= TODO: need write done child id, and watch this processes.
+if processes exit, restart it. all or none logic for write child IDs in file
+
+*/
+fn watch_child(child: Child) {}
