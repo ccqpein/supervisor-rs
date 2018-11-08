@@ -4,14 +4,17 @@ use std::fs::File;
 use std::io;
 use std::io::prelude::*;
 use std::process::{Child, Command};
+use std::thread::sleep;
+use std::time::{Duration, Instant};
 use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
 
-static mut childrenid: HashMap<u32, Config> = HashMap::new();
 #[derive(Debug)]
 pub struct Config {
     comm: String,
     stdout: Option<String>,
     stderr: Option<String>,
+
+    child_id: Option<u32>,
 }
 
 impl Config {
@@ -20,6 +23,7 @@ impl Config {
             comm: comm,
             stdout: None,
             stderr: None,
+            child_id: None,
         }
     }
 
@@ -105,4 +109,6 @@ pub fn start_new_child(config: &Config) -> io::Result<Child> {
 /*:= TODO: need write done child id, and watch this processes.
 if processes exit, restart it. all or none logic for write child IDs in file
 */
-fn watch_child(child: Child) {}
+fn watch_child(child: Child) {
+    loop {}
+}
