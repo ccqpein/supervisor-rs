@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io;
@@ -5,6 +6,7 @@ use std::io::prelude::*;
 use std::process::{Child, Command};
 use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
 
+static mut childrenid: HashMap<u32, Config> = HashMap::new();
 #[derive(Debug)]
 pub struct Config {
     comm: String,
@@ -102,6 +104,5 @@ pub fn start_new_child(config: &Config) -> io::Result<Child> {
 //:= MARK: take care all children in case they are stop running
 /*:= TODO: need write done child id, and watch this processes.
 if processes exit, restart it. all or none logic for write child IDs in file
-
 */
 fn watch_child(child: Child) {}
