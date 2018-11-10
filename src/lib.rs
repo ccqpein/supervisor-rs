@@ -87,8 +87,8 @@ impl Config {
     }
 }
 
-//:= MARK: need find a way to store process id, and handle stdout
-pub fn start_new_child(config: &Config) -> io::Result<Child> {
+//start child and update config child id
+pub fn start_new_child(config: &mut Config) -> io::Result<Child> {
     let (com, args) = config.split_args();
 
     let mut command = Command::new(&com);
@@ -100,15 +100,22 @@ pub fn start_new_child(config: &Config) -> io::Result<Child> {
         _ => (),
     }
 
-    command
+    let child = command
         .stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
-        .spawn()
+        .spawn();
+
+    match child {
+        Ok(ref c) => {
+            config.child_id = Some(c.id());
+            return child;
+        }
+        _ => return child,
+    };
 }
 
-//:= MARK: take care all children in case they are stop running
-/*:= TODO: need write done child id, and watch this processes.
-if processes exit, restart it. all or none logic for write child IDs in file
-*/
-fn watch_child(child: Child) {
+//:= MARK: log: store children ids
+//check if child still running
+//when restart, check ids in log. if id proceesing exsit, means supervisor dead accidently
+fn day_care() {
     loop {}
 }
