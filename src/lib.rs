@@ -1,9 +1,12 @@
+//extern crate yaml_rust;
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
-use std::process::{Child, Command};
+use std::os::unix::io::{FromRawFd, IntoRawFd};
+use std::process::{Child, Command, Stdio};
 use std::thread::sleep;
 use std::time::{Duration, Instant};
 use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
@@ -88,29 +91,40 @@ impl Config {
 }
 
 //start child and update config child id
+//:= DEBUG: for some reason, file stdio failed.
 pub fn start_new_child(config: &mut Config) -> io::Result<Child> {
     let (com, args) = config.split_args();
 
-    let mut command = Command::new(&com);
+    let file = File::create(config.stdout.as_ref().unwrap()).unwrap();
 
+    let mut command = Command::new(&com);
+    command.stdout(file);
+
+    println!("{:?}", command);
     match args {
         Some(arg) => {
             command.args(arg.split(' ').collect::<Vec<&str>>());
         }
         _ => (),
-    }
+    };
+
+    println!("{:?}", command);
 
     let child = command
-        .stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
+        //.stdout(fd1)
+        //.stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
         .spawn();
 
-    match child {
+    println!("command:{:?}", command);
+    println!("child:{:?}", child);
+    child
+    /*match child {
         Ok(ref c) => {
             config.child_id = Some(c.id());
             return child;
         }
         _ => return child,
-    };
+    };*/
 }
 
 //:= MARK: log: store children ids

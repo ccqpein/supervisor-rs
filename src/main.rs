@@ -2,10 +2,16 @@
 use supervisor_rs::*;
 
 fn main() {
-    let mut c = Config::read_from_yaml_file("/tmp/test.yml").unwrap();
-    println!("{:?}", c);
+    let mut conf = Config::read_from_yaml_file("/tmp/test.yml").unwrap();
+    println!("{:?}", conf);
 
-    let a = start_new_child(&mut c).unwrap();
-    println!("{}", a.id());
+    let a = start_new_child(&mut conf);
+
+    if let Ok(mut c) = a {
+        println!("{}", c.id());
+        //c.kill().expect("command wasn't running");
+        println!("{:?}", c.stdout);
+        println!("{:?}", c.stderr);
+    };
     loop {}
 }
