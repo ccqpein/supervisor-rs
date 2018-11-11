@@ -1,4 +1,4 @@
-//extern crate supervisor_rs;
+use std::{thread, time};
 use supervisor_rs::*;
 
 fn main() {
@@ -6,12 +6,12 @@ fn main() {
     println!("{:?}", conf);
 
     let a = start_new_child(&mut conf);
+    thread::sleep_ms(2000);
 
     if let Ok(mut c) = a {
         println!("{}", c.id());
+        c.kill().expect("command wasn't running");
         //c.kill().expect("command wasn't running");
-        println!("{:?}", c.stdout);
-        println!("{:?}", c.stderr);
     };
     loop {}
 }

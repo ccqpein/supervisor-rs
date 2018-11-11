@@ -1,5 +1,3 @@
-//extern crate yaml_rust;
-
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -95,12 +93,8 @@ impl Config {
 pub fn start_new_child(config: &mut Config) -> io::Result<Child> {
     let (com, args) = config.split_args();
 
-    let file = File::create(config.stdout.as_ref().unwrap()).unwrap();
-
     let mut command = Command::new(&com);
-    command.stdout(file);
 
-    println!("{:?}", command);
     match args {
         Some(arg) => {
             command.args(arg.split(' ').collect::<Vec<&str>>());
@@ -108,23 +102,20 @@ pub fn start_new_child(config: &mut Config) -> io::Result<Child> {
         _ => (),
     };
 
-    println!("{:?}", command);
-
+    //run command and give child handle
     let child = command
-        //.stdout(fd1)
-        //.stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
+        .stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
         .spawn();
 
-    println!("command:{:?}", command);
-    println!("child:{:?}", child);
-    child
-    /*match child {
+    match child {
         Ok(ref c) => {
             config.child_id = Some(c.id());
             return child;
         }
         _ => return child,
-    };*/
+    };
+
+    child
 }
 
 //:= MARK: log: store children ids
