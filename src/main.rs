@@ -10,7 +10,6 @@ fn main() {
 
     if let Ok(mut c) = a {
         println!("{}", c.id());
-        c.kill().expect("command wasn't running");
         //c.kill().expect("command wasn't running");
     };
     loop {}

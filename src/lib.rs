@@ -88,8 +88,19 @@ impl Config {
     }
 }
 
+struct Kindergarten {
+    name_list: HashMap<u32, Config>,
+}
+
+impl Kindergarten {
+    pub fn new() -> Self {}
+
+    pub fn register(&mut self, id: u32, conf: Config) {
+        self.name_list.insert(id, conf);
+    }
+}
+
 //start child and update config child id
-//:= DEBUG: for some reason, file stdio failed.
 pub fn start_new_child(config: &mut Config) -> io::Result<Child> {
     let (com, args) = config.split_args();
 
