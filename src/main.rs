@@ -1,4 +1,5 @@
-use std::{thread, time};
+use self::server::start_new_child;
+use std::thread;
 use supervisor_rs::*;
 
 fn main() {
@@ -6,11 +7,8 @@ fn main() {
     println!("{:?}", conf);
 
     let a = start_new_child(&mut conf);
-    thread::sleep_ms(2000);
-
-    if let Ok(mut c) = a {
-        println!("{}", c.id());
-        //c.kill().expect("command wasn't running");
-    };
+    thread::spawn(|| loop {
+        day_care();
+    });
     loop {}
 }

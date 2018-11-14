@@ -1,3 +1,6 @@
+pub mod client;
+pub mod server;
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
@@ -5,7 +8,7 @@ use std::io;
 use std::io::prelude::*;
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::process::{Child, Command, Stdio};
-use std::thread::sleep;
+use std::thread::{sleep, sleep_ms};
 use std::time::{Duration, Instant};
 use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
 
@@ -93,45 +96,21 @@ struct Kindergarten {
 }
 
 impl Kindergarten {
-    pub fn new() -> Self {}
+    pub fn new() -> Self {
+        Kindergarten {
+            name_list: HashMap::new(),
+        }
+    }
 
     pub fn register(&mut self, id: u32, conf: Config) {
         self.name_list.insert(id, conf);
     }
 }
 
-//start child and update config child id
-pub fn start_new_child(config: &mut Config) -> io::Result<Child> {
-    let (com, args) = config.split_args();
-
-    let mut command = Command::new(&com);
-
-    match args {
-        Some(arg) => {
-            command.args(arg.split(' ').collect::<Vec<&str>>());
-        }
-        _ => (),
-    };
-
-    //run command and give child handle
-    let child = command
-        .stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
-        .spawn();
-
-    match child {
-        Ok(ref c) => {
-            config.child_id = Some(c.id());
-            return child;
-        }
-        _ => return child,
-    };
-
-    child
-}
-
 //:= MARK: log: store children ids
 //check if child still running
 //when restart, check ids in log. if id proceesing exsit, means supervisor dead accidently
-fn day_care() {
-    loop {}
+pub fn day_care() {
+    sleep_ms(2000);
+    println!("{:?}", "hahah");
 }
