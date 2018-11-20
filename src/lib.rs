@@ -80,6 +80,8 @@ impl Config {
         }
     }
 
+    pub fn read_from_path(path)
+
     fn split_args(&self) -> (String, Option<String>) {
         let split_comm: Vec<_> = self.comm.splitn(2, ' ').collect();
 
@@ -89,28 +91,4 @@ impl Config {
 
         (split_comm[0].to_string(), None)
     }
-}
-
-struct Kindergarten {
-    name_list: HashMap<u32, Config>,
-}
-
-impl Kindergarten {
-    pub fn new() -> Self {
-        Kindergarten {
-            name_list: HashMap::new(),
-        }
-    }
-
-    pub fn register(&mut self, id: u32, conf: Config) {
-        self.name_list.insert(id, conf);
-    }
-}
-
-//:= MARK: log: store children ids
-//check if child still running
-//when restart, check ids in log. if id proceesing exsit, means supervisor dead accidently
-pub fn day_care() {
-    sleep_ms(2000);
-    println!("{:?}", "hahah");
 }
