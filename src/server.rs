@@ -2,9 +2,10 @@ use super::Config;
 
 use std::collections::HashMap;
 use std::error::Error;
+use std::ffi::OsStr;
+use std::fs;
 use std::fs::File;
-use std::io;
-use std::io::Read;
+use std::io::{Error as ioError, ErrorKind, Read, Result};
 use std::process::{Child, Command};
 use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
 
@@ -18,18 +19,15 @@ struct ServerConfig {
 }
 
 impl ServerConfig {
-    fn load(filename: &str) -> Result<Self, String> {
-        let contents = File::open(filename);
+    fn load(filename: &str) -> Result<Self> {
+        let mut contents = File::open(filename)?;
         let mut string_result = String::new();
-        match contents {
-            Ok(mut cont) => {
-                cont.read_to_string(&mut string_result);
-                return Self::read_from_str(string_result.as_str());
-            }
-            Err(e) => return Err(e.description().to_string()),
-        }
+
+        contents.read_to_string(&mut string_result);
+        Self::read_from_str(string_result.as_str())
     }
-    fn read_from_str(input: &str) -> Result<Self, String> {
+
+    fn read_from_str(input: &str) -> Result<Self> {
         let temp = YamlLoader::load_from_str(input);
         let mut result: Self;
 
@@ -40,14 +38,14 @@ impl ServerConfig {
                     load_path: doc["Loadpath"][0].clone().into_string().unwrap(),
                 }
             }
-            Err(e) => return Err(e.description().to_string()),
+            Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
 
         Ok(result)
     }
 }
 
-pub fn start_new_child(config: &mut Config) -> io::Result<Child> {
+pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
     let mut command = Command::new(&com);
@@ -81,7 +79,21 @@ pub fn start_new_child(config: &mut Config) -> io::Result<Child> {
 //2. first start will start all children in config path
 //3. then keep listening commands and can restart each of them
 pub fn start_new_server() {
-    let mut server_conf = ServerConfig::load("/tmp/server.yml");
+    let mut server_conf = ServerConfig::load("/tmp/server.yml").unwrap();
+    for entry in fs::read_dir(server_conf.load_path).unwrap() {
+        if let Ok(entry) = entry {
+            if let Some(extension) = entry.path().extension() {
+                if extension == "yml" {
+                    if let Ok(mut child_config) =
+                        Config::read_from_yaml_file(entry.path().to_str().unwrap())
+                    {
+                        //:= TODO: need some var form ouside to keep these children
+                        start_new_child(&mut child_config);
+                    }
+                }
+            }
+        }
+    }
 }
 
 struct Kindergarten {

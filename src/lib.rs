@@ -80,8 +80,6 @@ impl Config {
         }
     }
 
-    pub fn read_from_path(path)
-
     fn split_args(&self) -> (String, Option<String>) {
         let split_comm: Vec<_> = self.comm.splitn(2, ' ').collect();
 
