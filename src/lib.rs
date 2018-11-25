@@ -1,4 +1,5 @@
 pub mod client;
+pub mod communication;
 pub mod server;
 
 use std::collections::HashMap;
