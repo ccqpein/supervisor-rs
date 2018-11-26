@@ -10,3 +10,6 @@ use std::net::TcpListener;
 fn open_listener(host: &str, port: &str) -> Result<TcpListener> {
     TcpListener::bind(format!("{}:{}", host, port))
 }
+
+//client call servers
+fn call_server() {}

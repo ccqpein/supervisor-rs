@@ -164,11 +164,3 @@ pub fn start_new_server() -> Result<Kindergarten> {
 //start a listener for client commands
 //keep taking care children
 pub fn start_deamon(kg: Kindergarten) {}
-
-//:= MARK: log: store children ids
-//check if child still running
-//when restart, check ids in log. if id proceesing exsit, means supervisor dead accidently
-pub fn day_care() {
-    //sleep_ms(2000);
-    println!("{:?}", "hahah");
-}
