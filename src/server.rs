@@ -1,3 +1,4 @@
+use super::communication::*;
 use super::Config;
 
 use std::collections::HashMap;
@@ -6,7 +7,10 @@ use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
+use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
+use std::sync::mpsc::{channel, Receiver, Sender};
+use std::thread;
 use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
 
 /*/tmp/server.yml
@@ -161,6 +165,41 @@ pub fn start_new_server() -> Result<Kindergarten> {
     Ok(kindergarten)
 }
 
+//check all children are fine or not
+//if not fine, try to restart them
+//need channel input to update kindergarten
+fn day_care(kg: Kindergarten, rec: Receiver<String>) {}
+
 //start a listener for client commands
 //keep taking care children
-pub fn start_deamon(kg: Kindergarten) {}
+pub fn start_deamon(kg: Kindergarten) -> Result<()> {
+    //channel used to communicate from listener and day care
+    let (sender, receiver) = channel::<String>();
+
+    //start TCP listener to receive client commands
+    let listener = TcpListener::bind(format!("{}:{}", "localhost", 33889))?;
+    let handler_of_client = thread::spawn(move || {
+        for stream in listener.incoming() {
+            match stream {
+                Ok(stream) => {
+                    let thread_sender = sender.clone();
+                    handle_client(stream, thread_sender);
+                    println!("new client!");
+                }
+                Err(e) => { /* connection failed */ }
+            }
+        }
+    });
+
+    let kg = Kindergarten::new();
+    let handler_of_day_care = thread::spawn(move || day_care(kg, receiver));
+
+    Ok(())
+}
+
+fn handle_client(mut stream: TcpStream, sd: Sender<String>) {
+    let mut buf = vec![];
+    stream.read_to_end(&mut buf);
+
+    sd.send("lalal".to_string());
+}

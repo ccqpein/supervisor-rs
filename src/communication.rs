@@ -7,7 +7,7 @@ use std::io::Result;
 use std::net::TcpListener;
 
 //open a listener and return
-fn open_listener(host: &str, port: &str) -> Result<TcpListener> {
+pub fn open_listener(host: &str, port: i32) -> Result<TcpListener> {
     TcpListener::bind(format!("{}:{}", host, port))
 }
 
