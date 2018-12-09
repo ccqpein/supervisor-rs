@@ -1,6 +1,7 @@
 use super::communication::*;
 use super::Config;
 
+use core::time::Duration;
 use std::collections::HashMap;
 use std::error::Error;
 use std::ffi::OsStr;
@@ -154,7 +155,13 @@ pub fn start_new_server() -> Result<Kindergarten> {
                         kindergarten.register_id(id, child_config);
 
                         //regist name
-                        let filename = entry.file_name().into_string().unwrap();
+                        let filename = entry
+                            .file_name()
+                            .to_str()
+                            .unwrap()
+                            .split('.')
+                            .collect::<Vec<&str>>()[0]
+                            .to_string();
                         kindergarten.register_name(filename, id);
                     }
                 }
@@ -168,17 +175,34 @@ pub fn start_new_server() -> Result<Kindergarten> {
 //check all children are fine or not
 //if not fine, try to restart them
 //need channel input to update kindergarten
-fn day_care(kg: Kindergarten, rec: Receiver<String>) {}
+fn day_care(kg: Kindergarten, rec: Receiver<String>) {
+    loop {
+        thread::sleep(Duration::from_secs(1));
+        let (command, argvs) = rec.recv().unwrap();
+    }
+}
+
+//get client TCP stream and send to channel
+fn handle_client(mut stream: TcpStream, sd: Sender<String>) {
+    let mut buf = vec![];
+    stream.read_to_end(&mut buf);
+
+    //println!("{}", String::from_utf8(buf).unwrap());
+    let received_string = String::from_utf8(buf).unwrap();
+    sd.send(received_string);
+    //:= TODO: maybe have input legal check
+}
 
 //start a listener for client commands
 //keep taking care children
-pub fn start_deamon(kg: Kindergarten) -> Result<()> {
+pub fn start_deamon(kg: Kindergarten) -> Result<(thread::JoinHandle<()>, thread::JoinHandle<()>)> {
     //channel used to communicate from listener and day care
     let (sender, receiver) = channel::<String>();
 
     //start TCP listener to receive client commands
-    let listener = TcpListener::bind(format!("{}:{}", "localhost", 33889))?;
+    let listener = TcpListener::bind(format!("{}:{}", "127.0.0.1", 33889))?;
     let handler_of_client = thread::spawn(move || {
+        println!("inside");
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
@@ -192,14 +216,10 @@ pub fn start_deamon(kg: Kindergarten) -> Result<()> {
     });
 
     let kg = Kindergarten::new();
-    let handler_of_day_care = thread::spawn(move || day_care(kg, receiver));
+    let handler_of_day_care = thread::spawn(move || {
+        println!("inside");
+        day_care(kg, receiver);
+    });
 
-    Ok(())
-}
-
-fn handle_client(mut stream: TcpStream, sd: Sender<String>) {
-    let mut buf = vec![];
-    stream.read_to_end(&mut buf);
-
-    sd.send("lalal".to_string());
+    Ok((handler_of_client, handler_of_day_care))
 }

@@ -4,5 +4,6 @@ fn main() {
     let k = server::start_new_server();
     println!("{:?}", k);
 
-    //loop {}
+    let _ = server::start_deamon(k.unwrap());
+    loop {}
 }
