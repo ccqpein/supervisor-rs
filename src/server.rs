@@ -177,8 +177,9 @@ pub fn start_new_server() -> Result<Kindergarten> {
 //need channel input to update kindergarten
 fn day_care(kg: Kindergarten, rec: Receiver<String>) {
     loop {
-        thread::sleep(Duration::from_secs(1));
-        let (command, argvs) = rec.recv().unwrap();
+        //thread::sleep(Duration::from_secs(1));
+        //let (command, argvs) = rec.recv().unwrap();
+        println!("{:?}", rec.recv().unwrap());
     }
 }
 

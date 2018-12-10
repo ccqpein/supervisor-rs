@@ -12,5 +12,5 @@ struct Command {
 }
 
 impl Command {
-    pub fn new_from_string(s: String) -> Self {}
+    //    pub fn new_from_string(s: String) -> Self {}
 }

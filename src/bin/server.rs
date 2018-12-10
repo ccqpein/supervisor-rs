@@ -4,6 +4,8 @@ fn main() {
     let k = server::start_new_server();
     println!("{:?}", k);
 
-    let _ = server::start_deamon(k.unwrap());
-    loop {}
+    let (a, b) = server::start_deamon(k.unwrap()).unwrap();
+    //loop {} //this will cost a lot cpu source
+    a.join();
+    b.join();
 }
