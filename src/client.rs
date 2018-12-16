@@ -4,7 +4,7 @@ enum Ops {
     Restart,
     Stop,
     Start,
-    //:= MAYBE: new schdule, maybe not
+    None, //:= MAYBE: new schdule, maybe not
 }
 
 struct Command {
@@ -12,5 +12,10 @@ struct Command {
 }
 
 impl Command {
-    //    pub fn new_from_string(s: String) -> Self {}
+    pub fn new_from_string(s: String) -> Self {
+        match s.as_str() {
+            "Restart" | "restart" => Command { op: Ops::Restart },
+            _ => Command { op: Ops::None },
+        }
+    }
 }
