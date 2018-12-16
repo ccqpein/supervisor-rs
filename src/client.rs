@@ -1,5 +1,6 @@
 //mod command;
 
+#[derive(Debug)]
 enum Ops {
     Restart,
     Stop,
@@ -7,7 +8,8 @@ enum Ops {
     None, //:= MAYBE: new schdule, maybe not
 }
 
-struct Command {
+#[derive(Debug)]
+pub struct Command {
     op: Ops,
 }
 

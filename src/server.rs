@@ -1,3 +1,4 @@
+use super::client;
 use super::communication::*;
 use super::Config;
 
@@ -189,8 +190,8 @@ fn handle_client(mut stream: TcpStream, sd: Sender<String>) {
     stream.read_to_end(&mut buf);
 
     //println!("{}", String::from_utf8(buf).unwrap());
-    let received_string = String::from_utf8(buf).unwrap();
-    sd.send(received_string);
+    let received_comm = String::from_utf8(buf).unwrap();
+    sd.send(received_comm);
     //:= TODO: maybe have input legal check
 }
 
