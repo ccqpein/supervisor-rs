@@ -10,6 +10,7 @@ use std::fs;
 use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
 use std::net::{TcpListener, TcpStream};
+use std::path::Path;
 use std::process::{Child, Command};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
@@ -51,6 +52,57 @@ impl ServerConfig {
 
         Ok(result)
     }
+
+    //return vec of filename and path
+    fn all_ymls_in_load_path(&self) -> Result<Vec<(String, String)>> {
+        let mut result: Vec<(String, String)> = vec![];
+        for entry in fs::read_dir(self.load_path.clone())? {
+            if let Ok(entry) = entry {
+                if let Some(extension) = entry.path().extension() {
+                    if extension == "yml" {
+                        result.push((
+                            entry
+                                .file_name()
+                                .to_str()
+                                .unwrap()
+                                .split('.')
+                                .collect::<Vec<&str>>()[0]
+                                .to_string(),
+                            entry.path().to_str().unwrap().to_string(),
+                        ));
+                    }
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    fn find_config_by_name(&self, filename: String) -> Result<String> {
+        for entry in fs::read_dir(self.load_path.clone())? {
+            if let Ok(entry) = entry {
+                if let Some(extension) = entry.path().extension() {
+                    if extension == "yml" {
+                        if entry
+                            .file_name()
+                            .to_str()
+                            .unwrap()
+                            .split('.')
+                            .collect::<Vec<&str>>()[0]
+                            .to_string()
+                            == filename
+                        {
+                            return Ok(entry.path().to_str().unwrap().to_string());
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(ioError::new(
+            ErrorKind::NotFound,
+            format!("Cannot found this file in load path"),
+        ))
+    }
 }
 
 #[derive(Debug)]
@@ -79,6 +131,12 @@ impl Kindergarten {
         self.register_id(id, conf);
         self.register_name(name, id);
     }
+
+    //Step:
+    //1. kill old one
+    //2. start new one
+    //3. update kindergarten
+    pub fn restart_by_name(&mut self, name: String) {}
 }
 
 //start a child processing
@@ -139,6 +197,7 @@ pub fn start_new_server() -> Result<Kindergarten> {
     let mut kindergarten = Kindergarten::new();
 
     //run all config already in load path
+    //:= TODO: need replaced by ServerConfig.all_ymls_in_loadpath()
     for entry in fs::read_dir(server_conf.load_path)? {
         if let Ok(entry) = entry {
             if let Some(extension) = entry.path().extension() {
@@ -178,9 +237,18 @@ pub fn start_new_server() -> Result<Kindergarten> {
 //need channel input to update kindergarten
 fn day_care(kg: Kindergarten, rec: Receiver<String>) {
     loop {
-        //thread::sleep(Duration::from_secs(1));
-        //let (command, argvs) = rec.recv().unwrap();
-        println!("{:?}", rec.recv().unwrap());
+        let data = rec.recv().unwrap();
+        let command = client::Command::new_from_string(data);
+        let mut server_conf = ServerConfig::load("/tmp/server.yml").unwrap();
+
+        match command.op {
+            client::Ops::Restart => {
+                if let Ok(path) = server_conf.find_config_by_name(command.child_name.unwrap()) {
+                    start_new_child_with_file(&path);
+                    //
+                }
+            }
+        }
     }
 }
 
@@ -204,7 +272,7 @@ pub fn start_deamon(kg: Kindergarten) -> Result<(thread::JoinHandle<()>, thread:
     //start TCP listener to receive client commands
     let listener = TcpListener::bind(format!("{}:{}", "127.0.0.1", 33889))?;
     let handler_of_client = thread::spawn(move || {
-        println!("inside");
+        println!("inside listener");
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
@@ -219,7 +287,7 @@ pub fn start_deamon(kg: Kindergarten) -> Result<(thread::JoinHandle<()>, thread:
 
     let kg = Kindergarten::new();
     let handler_of_day_care = thread::spawn(move || {
-        println!("inside");
+        println!("inside day care");
         day_care(kg, receiver);
     });
 

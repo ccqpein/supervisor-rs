@@ -1,7 +1,7 @@
 //mod command;
 
 #[derive(Debug)]
-enum Ops {
+pub enum Ops {
     Restart,
     Stop,
     Start,
@@ -10,14 +10,22 @@ enum Ops {
 
 #[derive(Debug)]
 pub struct Command {
-    op: Ops,
+    pub op: Ops,
+    pub child_name: Option<String>,
 }
 
 impl Command {
     pub fn new_from_string(s: String) -> Self {
-        match s.as_str() {
-            "Restart" | "restart" => Command { op: Ops::Restart },
-            _ => Command { op: Ops::None },
+        let temp_str = s.as_str().split(' ').collect::<Vec<&str>>();
+        match temp_str[0] {
+            "Restart" | "restart" => Command {
+                op: Ops::Restart,
+                child_name: Some(temp_str[1].to_string()),
+            },
+            _ => Command {
+                op: Ops::None,
+                child_name: None,
+            },
         }
     }
 }
