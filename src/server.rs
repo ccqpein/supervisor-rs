@@ -77,6 +77,7 @@ impl ServerConfig {
         Ok(result)
     }
 
+    //return whole path of file which match filename
     fn find_config_by_name(&self, filename: String) -> Result<String> {
         for entry in fs::read_dir(self.load_path.clone())? {
             if let Ok(entry) = entry {
@@ -107,7 +108,7 @@ impl ServerConfig {
 
 #[derive(Debug)]
 pub struct Kindergarten {
-    id_list: HashMap<u32, Config>,
+    id_list: HashMap<u32, (Child, Config)>,
     name_list: HashMap<String, u32>,
 }
 
@@ -119,16 +120,16 @@ impl Kindergarten {
         }
     }
 
-    pub fn register_id(&mut self, id: u32, conf: Config) {
-        self.id_list.insert(id, conf);
+    pub fn register_id(&mut self, id: u32, child: Child, config: Config) {
+        self.id_list.insert(id, (child, config));
     }
 
     pub fn register_name(&mut self, name: String, id: u32) {
         self.name_list.insert(name, id);
     }
 
-    pub fn update(&mut self, id: u32, name: String, conf: Config) {
-        self.register_id(id, conf);
+    pub fn update(&mut self, id: u32, name: String, child: Child, config: Config) {
+        self.register_id(id, child, config);
         self.register_name(name, id);
     }
 
@@ -136,10 +137,42 @@ impl Kindergarten {
     //1. kill old one
     //2. start new one
     //3. update kindergarten
-    pub fn restart_by_name(&mut self, name: String) {}
+    pub fn restart(&mut self, name: String, config: &mut Config) -> Result<()> {
+        //get id
+        let id = self.name_list.get(&name).unwrap();
+        //get child_handle
+        let store_val = self.id_list.get_mut(&id).unwrap();
+        let child_handle = &mut (store_val.0);
+
+        //kill old child
+        if let Err(e) = child_handle.kill() {
+            println!("{:?}", e);
+            return Err(ioError::new(
+                ErrorKind::InvalidData,
+                format!("Cannot kill child {}, id is {}", name, id),
+            ));
+        }
+
+        //start new child
+        match start_new_child(config) {
+            Ok(child) => {
+                //update kindergarten
+                let new_id = child.id();
+                self.update(new_id, name, child, config.clone());
+                Ok(())
+            }
+            Err(e) => {
+                println!("{:?}", e);
+                return Err(ioError::new(
+                    ErrorKind::InvalidData,
+                    format!("Cannot kill child {}, id is {}", name, id),
+                ));
+            }
+        }
+    }
 }
 
-//start a child processing
+//start a child processing, and give child_id
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
@@ -205,24 +238,25 @@ pub fn start_new_server() -> Result<Kindergarten> {
                     if let Ok(mut child_config) =
                         Config::read_from_yaml_file(entry.path().to_str().unwrap())
                     {
-                        //start processing
-                        if let Err(_) = start_new_child(&mut child_config) {
-                            continue;
+                        match start_new_child(&mut child_config) {
+                            Ok(child_handle) => {
+                                //registe id
+                                let id = child_config.child_id.unwrap();
+                                kindergarten.register_id(id, child_handle, child_config);
+
+                                //regist name
+                                let filename = entry
+                                    .file_name()
+                                    .to_str()
+                                    .unwrap()
+                                    .split('.')
+                                    .collect::<Vec<&str>>()[0]
+                                    .to_string();
+                                kindergarten.register_name(filename, id);
+                            }
+                            //:= TODO: need handle this error in future
+                            Err(_) => (),
                         }
-
-                        //registe id
-                        let id = child_config.child_id.unwrap();
-                        kindergarten.register_id(id, child_config);
-
-                        //regist name
-                        let filename = entry
-                            .file_name()
-                            .to_str()
-                            .unwrap()
-                            .split('.')
-                            .collect::<Vec<&str>>()[0]
-                            .to_string();
-                        kindergarten.register_name(filename, id);
                     }
                 }
             }
@@ -248,6 +282,7 @@ fn day_care(kg: Kindergarten, rec: Receiver<String>) {
                     //
                 }
             }
+            _ => (),
         }
     }
 }
