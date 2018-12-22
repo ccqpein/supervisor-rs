@@ -7,6 +7,7 @@ use std::error::Error;
 use std::fs::File;
 use std::io;
 use std::io::prelude::*;
+use std::io::{Error as ioError, ErrorKind, Read, Result};
 use std::os::unix::io::{FromRawFd, IntoRawFd};
 use std::process::{Child, Command, Stdio};
 use std::thread::{sleep, sleep_ms};
@@ -43,7 +44,7 @@ impl Config {
     }
 
     //:= TODO: need more generic and match block
-    pub fn read_from_str(input: &str) -> Result<Self, String> {
+    pub fn read_from_str(input: &str) -> Result<Self> {
         let temp = YamlLoader::load_from_str(input);
 
         let mut result: Self;
@@ -62,13 +63,13 @@ impl Config {
                 }
             }
 
-            Err(e) => return Err(e.description().to_string()),
+            Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
 
         Ok(result)
     }
 
-    pub fn read_from_yaml_file(filename: &str) -> Result<Self, String> {
+    pub fn read_from_yaml_file(filename: &str) -> Result<Self> {
         let contents = File::open(filename);
         let mut string_result = String::new();
         match contents {
@@ -77,7 +78,7 @@ impl Config {
                 return Self::read_from_str(string_result.as_str());
             }
 
-            Err(e) => return Err(e.description().to_string()),
+            Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
     }
 

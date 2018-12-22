@@ -53,7 +53,7 @@ impl ServerConfig {
         Ok(result)
     }
 
-    //return vec of filename and path
+    //return vec of (filename, path)
     fn all_ymls_in_load_path(&self) -> Result<Vec<(String, String)>> {
         let mut result: Vec<(String, String)> = vec![];
         for entry in fs::read_dir(self.load_path.clone())? {
@@ -78,7 +78,7 @@ impl ServerConfig {
     }
 
     //return whole path of file which match filename
-    fn find_config_by_name(&self, filename: String) -> Result<String> {
+    fn find_config_by_name(&self, filename: &String) -> Result<Config> {
         for entry in fs::read_dir(self.load_path.clone())? {
             if let Ok(entry) = entry {
                 if let Some(extension) = entry.path().extension() {
@@ -90,9 +90,9 @@ impl ServerConfig {
                             .split('.')
                             .collect::<Vec<&str>>()[0]
                             .to_string()
-                            == filename
+                            == *filename
                         {
-                            return Ok(entry.path().to_str().unwrap().to_string());
+                            return Config::read_from_yaml_file(entry.path().to_str().unwrap());
                         }
                     }
                 }
@@ -124,11 +124,11 @@ impl Kindergarten {
         self.id_list.insert(id, (child, config));
     }
 
-    pub fn register_name(&mut self, name: String, id: u32) {
-        self.name_list.insert(name, id);
+    pub fn register_name(&mut self, name: &String, id: u32) {
+        self.name_list.insert(name.clone(), id);
     }
 
-    pub fn update(&mut self, id: u32, name: String, child: Child, config: Config) {
+    pub fn update(&mut self, id: u32, name: &String, child: Child, config: Config) {
         self.register_id(id, child, config);
         self.register_name(name, id);
     }
@@ -137,9 +137,9 @@ impl Kindergarten {
     //1. kill old one
     //2. start new one
     //3. update kindergarten
-    pub fn restart(&mut self, name: String, config: &mut Config) -> Result<()> {
+    pub fn restart(&mut self, name: &String, config: &mut Config) -> Result<()> {
         //get id
-        let id = self.name_list.get(&name).unwrap();
+        let id = self.name_list.get(name).unwrap();
         //get child_handle
         let store_val = self.id_list.get_mut(&id).unwrap();
         let child_handle = &mut (store_val.0);
@@ -158,6 +158,8 @@ impl Kindergarten {
             Ok(child) => {
                 //update kindergarten
                 let new_id = child.id();
+                //remove old id to make sure one-to-one relationship
+                self.id_list.remove(&id);
                 self.update(new_id, name, child, config.clone());
                 Ok(())
             }
@@ -172,7 +174,8 @@ impl Kindergarten {
     }
 }
 
-//start a child processing, and give child_id
+//start a child processing, and give child_handle
+//side effection: config.child_id be updated
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
@@ -252,7 +255,7 @@ pub fn start_new_server() -> Result<Kindergarten> {
                                     .split('.')
                                     .collect::<Vec<&str>>()[0]
                                     .to_string();
-                                kindergarten.register_name(filename, id);
+                                kindergarten.register_name(&filename, id);
                             }
                             //:= TODO: need handle this error in future
                             Err(_) => (),
@@ -269,17 +272,21 @@ pub fn start_new_server() -> Result<Kindergarten> {
 //check all children are fine or not
 //if not fine, try to restart them
 //need channel input to update kindergarten
-fn day_care(kg: Kindergarten, rec: Receiver<String>) {
+fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
+        //println!("{:?}", kg);
         let data = rec.recv().unwrap();
         let command = client::Command::new_from_string(data);
-        let mut server_conf = ServerConfig::load("/tmp/server.yml").unwrap();
 
         match command.op {
             client::Ops::Restart => {
-                if let Ok(path) = server_conf.find_config_by_name(command.child_name.unwrap()) {
-                    start_new_child_with_file(&path);
-                    //
+                let mut server_conf = ServerConfig::load("/tmp/server.yml").unwrap();
+                if let Ok(mut conf) =
+                    server_conf.find_config_by_name(command.child_name.as_ref().unwrap())
+                {
+                    kg.restart(command.child_name.as_ref().unwrap(), &mut conf);
+                } else {
+                    //error handle
                 }
             }
             _ => (),
@@ -320,7 +327,7 @@ pub fn start_deamon(kg: Kindergarten) -> Result<(thread::JoinHandle<()>, thread:
         }
     });
 
-    let kg = Kindergarten::new();
+    //let kg = Kindergarten::new();
     let handler_of_day_care = thread::spawn(move || {
         println!("inside day care");
         day_care(kg, receiver);
