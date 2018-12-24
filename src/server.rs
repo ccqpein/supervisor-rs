@@ -1,25 +1,16 @@
 use super::client;
-use super::communication::*;
 use super::Config;
 
-use core::time::Duration;
 use std::collections::HashMap;
 use std::error::Error;
-use std::ffi::OsStr;
 use std::fs;
 use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
 use std::net::{TcpListener, TcpStream};
-use std::path::Path;
 use std::process::{Child, Command};
 use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
-use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
-
-/*/tmp/server.yml
-loadpath:
-  - /tmp/client/
- */
+use yaml_rust::YamlLoader;
 
 #[derive(Debug)]
 struct ServerConfig {
@@ -128,6 +119,7 @@ impl Kindergarten {
         self.name_list.insert(name.clone(), id);
     }
 
+    //update
     pub fn update(&mut self, id: u32, name: &String, child: Child, config: Config) {
         self.register_id(id, child, config);
         self.register_name(name, id);
@@ -200,8 +192,6 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
         }
         _ => return child, //:= TODO: error handler
     };
-
-    child
 }
 
 //for deamon to start new child
@@ -233,35 +223,20 @@ pub fn start_new_server() -> Result<Kindergarten> {
     let mut kindergarten = Kindergarten::new();
 
     //run all config already in load path
-    //:= TODO: need replaced by ServerConfig.all_ymls_in_loadpath()
-    for entry in fs::read_dir(server_conf.load_path)? {
-        if let Ok(entry) = entry {
-            if let Some(extension) = entry.path().extension() {
-                if extension == "yml" {
-                    if let Ok(mut child_config) =
-                        Config::read_from_yaml_file(entry.path().to_str().unwrap())
-                    {
-                        match start_new_child(&mut child_config) {
-                            Ok(child_handle) => {
-                                //registe id
-                                let id = child_config.child_id.unwrap();
-                                kindergarten.register_id(id, child_handle, child_config);
+    //:= TODO: need replaced by ServerConfig.all_ymls_in_load_path()
+    for conf in server_conf.all_ymls_in_load_path()? {
+        if let Ok(mut child_config) = Config::read_from_yaml_file(&conf.1) {
+            match start_new_child(&mut child_config) {
+                Ok(child_handle) => {
+                    //registe id
+                    let id = child_config.child_id.unwrap();
+                    kindergarten.register_id(id, child_handle, child_config);
 
-                                //regist name
-                                let filename = entry
-                                    .file_name()
-                                    .to_str()
-                                    .unwrap()
-                                    .split('.')
-                                    .collect::<Vec<&str>>()[0]
-                                    .to_string();
-                                kindergarten.register_name(&filename, id);
-                            }
-                            //:= TODO: need handle this error in future
-                            Err(_) => (),
-                        }
-                    }
+                    //regist name
+                    kindergarten.register_name(&conf.0, id);
                 }
+                //:= TODO: need handle this error in future
+                Err(_) => (),
             }
         }
     }
@@ -274,7 +249,7 @@ pub fn start_new_server() -> Result<Kindergarten> {
 //need channel input to update kindergarten
 fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
-        //println!("{:?}", kg);
+        println!("{:#?}", kg);
         let data = rec.recv().unwrap();
         let command = client::Command::new_from_string(data);
 
