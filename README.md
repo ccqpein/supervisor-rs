@@ -5,7 +5,7 @@
 **features**:
 
 - [X] start different processing depend on particular yaml file when startup
-- [ ] start processing when have new config in load path
+- [X] start processing when have new config in load path
 - [ ] startup with particular server config
 - [X] restart processing
 - [ ] stop processing

@@ -1,18 +1,10 @@
 pub mod client;
-pub mod communication;
 pub mod server;
 
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs::File;
-use std::io;
-use std::io::prelude::*;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
-use std::os::unix::io::{FromRawFd, IntoRawFd};
-use std::process::{Child, Command, Stdio};
-use std::thread::{sleep, sleep_ms};
-use std::time::{Duration, Instant};
-use yaml_rust::{ScanError, Yaml, YamlEmitter, YamlLoader};
+use yaml_rust::YamlLoader;
 
 #[derive(Debug)]
 pub struct Config {

@@ -23,7 +23,7 @@ impl ServerConfig {
         let mut contents = File::open(filename)?;
         let mut string_result = String::new();
 
-        contents.read_to_string(&mut string_result);
+        contents.read_to_string(&mut string_result)?;
         Self::read_from_str(string_result.as_str())
     }
 
@@ -198,16 +198,11 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 //receive file path, make it to config, then start it
 //return id, config for deamon to update kindergarten
 pub fn start_new_child_with_file(filepath: &str) -> Result<(u32, Config)> {
-    if let Ok(mut conf) = Config::read_from_yaml_file(filepath) {
-        if let Ok(child) = start_new_child(&mut conf) {
-            return Ok((conf.child_id.unwrap(), conf));
-        }
-    }
+    let mut conf = Config::read_from_yaml_file(filepath)?;
 
-    Err(ioError::new(
-        ErrorKind::Other,
-        format!("Cannot start this, file is {}", filepath),
-    ))
+    start_new_child(&mut conf)?;
+
+    return Ok((conf.child_id.unwrap(), conf));
 }
 
 //Receive server config and start a new server
@@ -217,28 +212,21 @@ pub fn start_new_child_with_file(filepath: &str) -> Result<(u32, Config)> {
 //3. then keep listening commands and can restart each of them //move to start deamon
 pub fn start_new_server() -> Result<Kindergarten> {
     //Read server's config file
-    let mut server_conf = ServerConfig::load("/tmp/server.yml")?;
+    let server_conf = ServerConfig::load("/tmp/server.yml")?;
 
     //create new kindergarten
     let mut kindergarten = Kindergarten::new();
 
     //run all config already in load path
-    //:= TODO: need replaced by ServerConfig.all_ymls_in_load_path()
     for conf in server_conf.all_ymls_in_load_path()? {
-        if let Ok(mut child_config) = Config::read_from_yaml_file(&conf.1) {
-            match start_new_child(&mut child_config) {
-                Ok(child_handle) => {
-                    //registe id
-                    let id = child_config.child_id.unwrap();
-                    kindergarten.register_id(id, child_handle, child_config);
+        let mut child_config = Config::read_from_yaml_file(&conf.1)?;
 
-                    //regist name
-                    kindergarten.register_name(&conf.0, id);
-                }
-                //:= TODO: need handle this error in future
-                Err(_) => (),
-            }
-        }
+        let child_handle = start_new_child(&mut child_config)?;
+        //registe id
+        let id = child_config.child_id.unwrap();
+        kindergarten.register_id(id, child_handle, child_config);
+        //regist name
+        kindergarten.register_name(&conf.0, id);
     }
 
     Ok(kindergarten)
@@ -249,19 +237,24 @@ pub fn start_new_server() -> Result<Kindergarten> {
 //need channel input to update kindergarten
 fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
-        println!("{:#?}", kg);
+        //println!("{:#?}", kg);
         let data = rec.recv().unwrap();
         let command = client::Command::new_from_string(data);
 
         match command.op {
             client::Ops::Restart => {
-                let mut server_conf = ServerConfig::load("/tmp/server.yml").unwrap();
-                if let Ok(mut conf) =
-                    server_conf.find_config_by_name(command.child_name.as_ref().unwrap())
-                {
-                    kg.restart(command.child_name.as_ref().unwrap(), &mut conf);
-                } else {
-                    //error handle
+                let server_conf = ServerConfig::load("/tmp/server.yml").unwrap();
+
+                match server_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {
+                    Ok(mut conf) => {
+                        match kg.restart(command.child_name.as_ref().unwrap(), &mut conf) {
+                            Ok(_) => (),
+                            Err(e) => println!("{}", e),
+                        }
+                    }
+                    Err(e) => {
+                        println!("{:?}", e);
+                    }
                 }
             }
             _ => (),
@@ -270,14 +263,14 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
 }
 
 //get client TCP stream and send to channel
-fn handle_client(mut stream: TcpStream, sd: Sender<String>) {
+fn handle_client(mut stream: TcpStream, sd: Sender<String>) -> Result<()> {
     let mut buf = vec![];
-    stream.read_to_end(&mut buf);
+    stream.read_to_end(&mut buf)?;
 
-    //println!("{}", String::from_utf8(buf).unwrap());
     let received_comm = String::from_utf8(buf).unwrap();
-    sd.send(received_comm);
+    sd.send(received_comm).unwrap();
     //:= TODO: maybe have input legal check
+    Ok(())
 }
 
 //start a listener for client commands
@@ -289,22 +282,21 @@ pub fn start_deamon(kg: Kindergarten) -> Result<(thread::JoinHandle<()>, thread:
     //start TCP listener to receive client commands
     let listener = TcpListener::bind(format!("{}:{}", "127.0.0.1", 33889))?;
     let handler_of_client = thread::spawn(move || {
-        println!("inside listener");
         for stream in listener.incoming() {
             match stream {
                 Ok(stream) => {
                     let thread_sender = sender.clone();
-                    handle_client(stream, thread_sender);
-                    println!("new client!");
+                    if let Err(e) = handle_client(stream, thread_sender) {
+                        println!("{}", e);
+                    };
                 }
-                Err(e) => { /* connection failed */ }
+                Err(e) => println!("{}", e),
             }
         }
     });
 
     //let kg = Kindergarten::new();
     let handler_of_day_care = thread::spawn(move || {
-        println!("inside day care");
         day_care(kg, receiver);
     });
 
