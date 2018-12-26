@@ -99,6 +99,7 @@ impl ServerConfig {
 
 #[derive(Debug)]
 pub struct Kindergarten {
+    server_config_path: String,
     id_list: HashMap<u32, (Child, Config)>,
     name_list: HashMap<String, u32>,
 }
@@ -106,6 +107,7 @@ pub struct Kindergarten {
 impl Kindergarten {
     pub fn new() -> Self {
         Kindergarten {
+            server_config_path: "".to_string(),
             id_list: HashMap::new(),
             name_list: HashMap::new(),
         }
@@ -212,10 +214,12 @@ pub fn start_new_child_with_file(filepath: &str) -> Result<(u32, Config)> {
 //3. then keep listening commands and can restart each of them //move to start deamon
 pub fn start_new_server() -> Result<Kindergarten> {
     //Read server's config file
+    //:= TODO: can input new server_conf path or have default path
     let server_conf = ServerConfig::load("/tmp/server.yml")?;
 
     //create new kindergarten
     let mut kindergarten = Kindergarten::new();
+    //:= TODO: store server_conf path in kindergarten
 
     //run all config already in load path
     for conf in server_conf.all_ymls_in_load_path()? {
@@ -243,6 +247,7 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
 
         match command.op {
             client::Ops::Restart => {
+                //:= TODO: server_conf path in kindergarten
                 let server_conf = ServerConfig::load("/tmp/server.yml").unwrap();
 
                 match server_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {

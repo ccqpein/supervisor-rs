@@ -1,7 +1,6 @@
 use std::env;
 use std::io::prelude::*;
 use std::net::TcpStream;
-use supervisor_rs::client;
 
 fn main() {
     let arguments = env::args();
@@ -15,6 +14,6 @@ fn main() {
     let data_2_server = change_2_vec[1..].join(" ");
 
     let mut stream = TcpStream::connect("127.0.0.1:33889").unwrap();
-    stream.write_all(data_2_server.as_bytes());
-    stream.flush();
+    stream.write_all(data_2_server.as_bytes()).unwrap();
+    stream.flush().unwrap();
 }
