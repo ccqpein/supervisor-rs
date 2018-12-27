@@ -1,11 +1,23 @@
+use std::env;
 use supervisor_rs::server;
 
 fn main() {
-    //:= TODO: should put init server_conf path be paremeter of start_new_server()
-    let k = server::start_new_server();
+    let arguments = env::args();
+    let change_2_vec = arguments.collect::<Vec<String>>();
+
+    if change_2_vec.len() > 2 {
+        println!("{}", "too much arguments, not support yet.");
+        return;
+    }
+
+    let k = if change_2_vec.len() == 1 {
+        server::start_new_server(&change_2_vec[1])
+    } else {
+        server::start_new_server("")
+    };
 
     let (a, b) = server::start_deamon(k.unwrap()).unwrap();
-    //loop {} //this will cost a lot cpu source
+
     a.join().unwrap();
     b.join().unwrap();
 }

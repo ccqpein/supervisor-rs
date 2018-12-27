@@ -35,7 +35,6 @@ impl Config {
         self
     }
 
-    //:= TODO: need more generic and match block
     pub fn read_from_str(input: &str) -> Result<Self> {
         let temp = YamlLoader::load_from_str(input);
 
@@ -66,7 +65,7 @@ impl Config {
         let mut string_result = String::new();
         match contents {
             Ok(mut cont) => {
-                cont.read_to_string(&mut string_result);
+                let _ = cont.read_to_string(&mut string_result);
                 return Self::read_from_str(string_result.as_str());
             }
 

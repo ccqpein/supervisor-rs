@@ -192,7 +192,12 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
             config.child_id = Some(c.id());
             return child;
         }
-        _ => return child, //:= TODO: error handler
+        _ => {
+            return Err(ioError::new(
+                ErrorKind::Other,
+                format!("Cannot start command {:?}", command),
+            ));
+        }
     };
 }
 
@@ -212,14 +217,17 @@ pub fn start_new_child_with_file(filepath: &str) -> Result<(u32, Config)> {
 //1. a way receive command from client //move to start_deamon
 //2. first start will start all children in config path
 //3. then keep listening commands and can restart each of them //move to start deamon
-pub fn start_new_server() -> Result<Kindergarten> {
+pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //Read server's config file
-    //:= TODO: can input new server_conf path or have default path
-    let server_conf = ServerConfig::load("/tmp/server.yml")?;
+    let server_conf = if config_path == "" {
+        ServerConfig::load("/tmp/server.yml")?
+    } else {
+        ServerConfig::load(config_path)?
+    };
 
     //create new kindergarten
     let mut kindergarten = Kindergarten::new();
-    //:= TODO: store server_conf path in kindergarten
+    kindergarten.server_config_path = config_path.to_string();
 
     //run all config already in load path
     for conf in server_conf.all_ymls_in_load_path()? {
@@ -247,19 +255,27 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
 
         match command.op {
             client::Ops::Restart => {
-                //:= TODO: server_conf path in kindergarten
-                let server_conf = ServerConfig::load("/tmp/server.yml").unwrap();
+                let server_conf = if kg.server_config_path == "" {
+                    ServerConfig::load("/tmp/server.yml")
+                } else {
+                    ServerConfig::load(&kg.server_config_path)
+                };
 
-                match server_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {
-                    Ok(mut conf) => {
-                        match kg.restart(command.child_name.as_ref().unwrap(), &mut conf) {
-                            Ok(_) => (),
-                            Err(e) => println!("{}", e),
+                match server_conf {
+                    Ok(s_conf) => {
+                        match s_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {
+                            Ok(mut conf) => {
+                                match kg.restart(command.child_name.as_ref().unwrap(), &mut conf) {
+                                    Ok(_) => (),
+                                    Err(e) => println!("{}", e),
+                                }
+                            }
+                            Err(e) => {
+                                println!("{:?}", e);
+                            }
                         }
                     }
-                    Err(e) => {
-                        println!("{:?}", e);
-                    }
+                    Err(e) => println!("Cannot re-load server's config file, {}", e),
                 }
             }
             _ => (),
@@ -285,7 +301,7 @@ pub fn start_deamon(kg: Kindergarten) -> Result<(thread::JoinHandle<()>, thread:
     let (sender, receiver) = channel::<String>();
 
     //start TCP listener to receive client commands
-    let listener = TcpListener::bind(format!("{}:{}", "127.0.0.1", 33889))?;
+    let listener = TcpListener::bind(format!("{}:{}", "0.0.0.0", 33889))?;
     let handler_of_client = thread::spawn(move || {
         for stream in listener.incoming() {
             match stream {
