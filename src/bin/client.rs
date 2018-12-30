@@ -13,6 +13,8 @@ fn main() {
 
     let data_2_server = change_2_vec[1..].join(" ");
 
+    //:= TODO: client should can send command to remote server with data which truly nesseary
+    //:= TODO: need get out host, and filter data
     let mut stream = TcpStream::connect("127.0.0.1:33889").unwrap();
     stream.write_all(data_2_server.as_bytes()).unwrap();
     stream.flush().unwrap();

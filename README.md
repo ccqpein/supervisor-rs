@@ -1,16 +1,17 @@
 # README #
 
-`supervisor-rs` used to be a manager of handle application running. `supervisor-rs` can start/restart/stop(still developing) processing redirect log depend on yaml config file.
+`supervisor-rs` used to be a manager of handle application running. `supervisor-rs` can start/restart/stop(still developing) processing.
 
 **features**:
 
 - [X] start different processing depend on particular yaml file when startup
 - [X] start processing when have new config in load path
-- [ ] startup with particular server config
+- [X] startup with particular server config
 - [X] restart processing
 - [ ] stop processing
 - [X] redirect stdout and stderr to log file
-- [ ] compress log file when log file become huge
+- [ ] ~~compress log file when log file become huge~~
+- [ ] client should talk with server's side supervisor-rs
 
 Compress log file maybe not good ideas, change running processing's file handle is too much work for `supervisor-rs`. 
 
@@ -39,3 +40,6 @@ Command:
 Stdout:
   - /tmp/log
 ```
+
+## Usage ##
+
