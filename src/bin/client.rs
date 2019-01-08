@@ -1,21 +1,29 @@
 use std::env;
 use std::io::prelude::*;
 use std::net::TcpStream;
+use supervisor_rs::client::Command;
 
 fn main() {
     let arguments = env::args();
     let change_2_vec = arguments.collect::<Vec<String>>();
+    let cache_command = Command::new_from_string(change_2_vec[1..].to_vec());
 
-    if change_2_vec.len() > 3 {
-        println!("{}", "too much arguments, not support yet.");
-        return;
-    }
+    let mut stream = if let Some(_) = cache_command.prep {
+        TcpStream::connect(format!(
+            "{}{}",
+            cache_command.obj.unwrap().as_str(),
+            ":33889"
+        ))
+        .unwrap()
+    } else {
+        TcpStream::connect("127.0.0.1:33889").unwrap()
+    };
 
-    let data_2_server = change_2_vec[1..].join(" ");
-
-    //:= TODO: client should can send command to remote server with data which truly nesseary
-    //:= TODO: need get out host, and filter data
-    let mut stream = TcpStream::connect("127.0.0.1:33889").unwrap();
+    let data_2_server = format!(
+        "{} {}",
+        cache_command.op.to_string(),
+        cache_command.child_name.unwrap()
+    );
     stream.write_all(data_2_server.as_bytes()).unwrap();
     stream.flush().unwrap();
 }

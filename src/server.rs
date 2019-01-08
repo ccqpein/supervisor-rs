@@ -251,7 +251,8 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
         //println!("{:#?}", kg);
         let data = rec.recv().unwrap();
-        let command = client::Command::new_from_string(data);
+        let command =
+            client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>());
 
         match command.op {
             client::Ops::Restart => {

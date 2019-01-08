@@ -14,6 +14,13 @@ impl Ops {
             _ => return Ops::None,
         }
     }
+
+    pub fn to_string(&self) -> String {
+        match self {
+            Ops::Restart => return "restart".to_string(),
+            _ => return "none".to_string(),
+        }
+    }
 }
 
 #[derive(Debug)]
@@ -50,25 +57,39 @@ impl Command {
         }
     }
 
-    pub fn new_from_string(s: String) -> Self {
+    pub fn new_from_string(s: Vec<String>) -> Self {
         let mut re = Self::new();
-        let temp_str = s.as_str().split(' ').collect::<Vec<&str>>();
 
-        //:= MARK: this logic should be more simple, or I just use some shell command package
-        match temp_str.len() {
-            //2 means ops and parameter
-            2 => {
-                re.op = Ops::from_str(temp_str[0]);
-                re.child_name = Some(temp_str[1].to_string());
-            }
-            4 => {
-                re.op = Ops::from_str(temp_str[0]);
-                re.child_name = Some(temp_str[1].to_string());
+        if s.len() < 2 {
+            println!("wrong");
+            return re;
+        }
 
-                re.prep = Some(Prepositions::from_str(temp_str[2]));
-                re.obj = Some(temp_str[3].to_string());
-            }
-            _ => (),
+        re.op = Ops::from_str(&s[0]);
+        re.child_name = Some(s[1].clone());
+
+        if s.len() > 2 {
+            re.prep = Some(Prepositions::from_str(&s[2]));
+            re.obj = Some(s[3].clone());
+        }
+
+        re
+    }
+
+    pub fn new_from_str(s: Vec<&str>) -> Self {
+        let mut re = Self::new();
+
+        if s.len() < 2 {
+            println!("wrong");
+            return re;
+        }
+
+        re.op = Ops::from_str(&s[0]);
+        re.child_name = Some(s[1].to_string());
+
+        if s.len() > 2 {
+            re.prep = Some(Prepositions::from_str(&s[2]));
+            re.obj = Some(s[3].to_string());
         }
 
         re
