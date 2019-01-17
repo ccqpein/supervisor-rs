@@ -7,3 +7,11 @@ edition = "2018"
 [dependencies]
 #subprocess = "0.1.17"
 yaml-rust = "0.4"
+
+[[bin]]
+name = "supervisor-rs-server"
+path = "src/bin/server.rs"
+
+[[bin]]
+name = "supervisor-rs-client"
+path = "src/bin/client.rs"

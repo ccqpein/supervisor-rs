@@ -1,7 +1,7 @@
 use super::client;
+use super::kindergarten::*;
 use super::Config;
 
-use std::collections::HashMap;
 use std::error::Error;
 use std::fs;
 use std::fs::File;
@@ -97,77 +97,6 @@ impl ServerConfig {
     }
 }
 
-#[derive(Debug)]
-pub struct Kindergarten {
-    server_config_path: String,
-    id_list: HashMap<u32, (Child, Config)>,
-    name_list: HashMap<String, u32>,
-}
-
-impl Kindergarten {
-    pub fn new() -> Self {
-        Kindergarten {
-            server_config_path: "".to_string(),
-            id_list: HashMap::new(),
-            name_list: HashMap::new(),
-        }
-    }
-
-    pub fn register_id(&mut self, id: u32, child: Child, config: Config) {
-        self.id_list.insert(id, (child, config));
-    }
-
-    pub fn register_name(&mut self, name: &String, id: u32) {
-        self.name_list.insert(name.clone(), id);
-    }
-
-    //update
-    pub fn update(&mut self, id: u32, name: &String, child: Child, config: Config) {
-        self.register_id(id, child, config);
-        self.register_name(name, id);
-    }
-
-    //Step:
-    //1. kill old one
-    //2. start new one
-    //3. update kindergarten
-    pub fn restart(&mut self, name: &String, config: &mut Config) -> Result<()> {
-        //get id
-        let id = self.name_list.get(name).unwrap();
-        //get child_handle
-        let store_val = self.id_list.get_mut(&id).unwrap();
-        let child_handle = &mut (store_val.0);
-
-        //kill old child
-        if let Err(e) = child_handle.kill() {
-            println!("{:?}", e);
-            return Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!("Cannot kill child {}, id is {}", name, id),
-            ));
-        }
-
-        //start new child
-        match start_new_child(config) {
-            Ok(child) => {
-                //update kindergarten
-                let new_id = child.id();
-                //remove old id to make sure one-to-one relationship
-                self.id_list.remove(&id);
-                self.update(new_id, name, child, config.clone());
-                Ok(())
-            }
-            Err(e) => {
-                println!("{:?}", e);
-                return Err(ioError::new(
-                    ErrorKind::InvalidData,
-                    format!("Cannot kill child {}, id is {}", name, id),
-                ));
-            }
-        }
-    }
-}
-
 //start a child processing, and give child_handle
 //side effection: config.child_id be updated
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
@@ -227,6 +156,8 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
     //create new kindergarten
     let mut kindergarten = Kindergarten::new();
+
+    //store server config location
     kindergarten.server_config_path = config_path.to_string();
 
     //run all config already in load path
@@ -251,8 +182,13 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
         //println!("{:#?}", kg);
         let data = rec.recv().unwrap();
-        let command =
-            client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>());
+        let command = if let Ok(com) =
+            client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())
+        {
+            com
+        } else {
+            continue;
+        };
 
         match command.op {
             client::Ops::Restart => {
@@ -279,6 +215,34 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
                     Err(e) => println!("Cannot re-load server's config file, {}", e),
                 }
             }
+
+            // warm start a new child after its config yaml file put in loadpath
+            client::Ops::Start => {
+                let server_conf = if kg.server_config_path == "" {
+                    ServerConfig::load("/tmp/server.yml")
+                } else {
+                    ServerConfig::load(&kg.server_config_path)
+                };
+
+                match server_conf {
+                    Ok(s_conf) => {
+                        match s_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {
+                            Ok(mut conf) => match start_new_child(&mut conf) {
+                                Ok(child_handle) => {
+                                    let id = conf.child_id.unwrap();
+                                    kg.register_id(id, child_handle, conf);
+                                    kg.register_name(&command.child_name.unwrap(), id);
+                                }
+                                Err(e) => println!("{:?}", e),
+                            },
+                            Err(e) => {
+                                println!("{:?}", e);
+                            }
+                        }
+                    }
+                    Err(e) => println!("Cannot re-load server's config file, {}", e),
+                }
+            }
             _ => (),
         }
     }
@@ -291,7 +255,9 @@ fn handle_client(mut stream: TcpStream, sd: Sender<String>) -> Result<()> {
 
     let received_comm = String::from_utf8(buf).unwrap();
     sd.send(received_comm).unwrap();
-    //:= TODO: maybe have input legal check
+
+    //why I need legal check here because I cannot sure if somebody send data here
+    //:= TODO: need parse command here too
     Ok(())
 }
 

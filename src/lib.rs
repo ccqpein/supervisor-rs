@@ -1,4 +1,5 @@
 pub mod client;
+pub mod kindergarten;
 pub mod server;
 
 use std::error::Error;
@@ -11,7 +12,6 @@ pub struct Config {
     comm: String,
     stdout: Option<String>,
     stderr: Option<String>,
-
     child_id: Option<u32>,
 }
 

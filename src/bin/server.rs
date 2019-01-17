@@ -16,7 +16,16 @@ fn main() {
         server::start_new_server("")
     };
 
-    let (a, b) = server::start_deamon(k.unwrap()).unwrap();
+    let (a, b) = match k {
+        Ok(kk) => server::start_deamon(kk).unwrap(),
+        Err(e) => {
+            println!(
+                "kindergarten build fail, looks like server cannot start, error: {}",
+                e
+            );
+            return;
+        }
+    };
 
     a.join().unwrap();
     b.join().unwrap();

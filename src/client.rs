@@ -1,23 +1,30 @@
+use std::io::{Error, ErrorKind, Result};
+
 #[derive(Debug)]
 pub enum Ops {
     Restart,
     Stop,
     Start,
-    None, //:= MAYBE: new schdule, maybe not
+    None,
 }
 
+//Ops is struct of operations of client commands
 impl Ops {
     fn from_str(s: &str) -> Self {
         match s {
             "Restart" | "restart" => return Ops::Restart,
-            //:= TODO: need tell user something wrong
-            _ => return Ops::None,
+            "Start" | "start" => return Ops::Start,
+            _ => {
+                println!("does not support {}", s);
+                return Ops::None;
+            }
         }
     }
 
     pub fn to_string(&self) -> String {
         match self {
             Ops::Restart => return "restart".to_string(),
+            Ops::Start => return "start".to_string(),
             _ => return "none".to_string(),
         }
     }
@@ -33,8 +40,14 @@ impl Prepositions {
     fn from_str(s: &str) -> Self {
         match s {
             "On" | "on" => return Prepositions::On,
-            //:= TODO: need tell user something wrong
-            _ => return Prepositions::None,
+            "" => {
+                println!("you miss prepositions");
+                return Prepositions::None;
+            }
+            _ => {
+                println!("does not support {}", s);
+                return Prepositions::None;
+            }
         }
     }
 }
@@ -57,12 +70,13 @@ impl Command {
         }
     }
 
-    pub fn new_from_string(s: Vec<String>) -> Self {
+    //:= TODO: need find a way to parse string conveniently
+    pub fn new_from_string(s: Vec<String>) -> Result<Self> {
         let mut re = Self::new();
 
         if s.len() < 2 {
             println!("wrong");
-            return re;
+            return Err(Error::new(ErrorKind::Other, "command parse wrong"));
         }
 
         re.op = Ops::from_str(&s[0]);
@@ -70,28 +84,32 @@ impl Command {
 
         if s.len() > 2 {
             re.prep = Some(Prepositions::from_str(&s[2]));
-            re.obj = Some(s[3].clone());
+            if s.len() == 4 {
+                re.obj = Some(s[3].clone());
+            }
         }
 
-        re
+        Ok(re)
     }
 
-    pub fn new_from_str(s: Vec<&str>) -> Self {
+    pub fn new_from_str(s: Vec<&str>) -> Result<Self> {
         let mut re = Self::new();
 
         if s.len() < 2 {
             println!("wrong");
-            return re;
+            return Err(Error::new(ErrorKind::Other, "command parse wrong"));
         }
 
         re.op = Ops::from_str(&s[0]);
         re.child_name = Some(s[1].to_string());
 
-        if s.len() > 2 {
+        if s.len() == 4 {
             re.prep = Some(Prepositions::from_str(&s[2]));
-            re.obj = Some(s[3].to_string());
+            if s.len() == 4 {
+                re.obj = Some(s[3].to_string());
+            }
         }
 
-        re
+        Ok(re)
     }
 }
