@@ -10,7 +10,7 @@ use supervisor_rs::client::Command;
 fn main() -> Result<()> {
     let arguments = env::args();
     let change_2_vec = arguments.collect::<Vec<String>>();
-    let cache_command = Command::new_from_string(change_2_vec[1..].to_vec());
+    let cache_command = Command::new_from_string(change_2_vec[1..].to_vec())?;
 
     //println!("{:?}", cache_command);
 
