@@ -243,6 +243,8 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
                     Err(e) => println!("Cannot re-load server's config file, {}", e),
                 }
             }
+
+            //:= TODO: need stop logic
             _ => (),
         }
     }
@@ -256,8 +258,6 @@ fn handle_client(mut stream: TcpStream, sd: Sender<String>) -> Result<()> {
     let received_comm = String::from_utf8(buf).unwrap();
     sd.send(received_comm).unwrap();
 
-    //why I need legal check here because I cannot sure if somebody send data here
-    //:= TODO: need parse command here too
     Ok(())
 }
 

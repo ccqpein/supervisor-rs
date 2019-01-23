@@ -14,7 +14,6 @@ fn main() -> Result<()> {
 
     //println!("{:?}", cache_command);
 
-    //:= TODO: need use timeout connection
     let mut stream = if let Some(_) = cache_command.prep {
         //parse ip address
         let addr = if let Some(des) = cache_command.obj {

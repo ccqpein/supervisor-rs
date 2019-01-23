@@ -14,6 +14,7 @@ impl Ops {
         match s {
             "Restart" | "restart" => return Ops::Restart,
             "Start" | "start" => return Ops::Start,
+            "Stop" | "stop" => return Ops::Stop,
             _ => {
                 println!("does not support {}", s);
                 return Ops::None;
@@ -25,6 +26,7 @@ impl Ops {
         match self {
             Ops::Restart => return "restart".to_string(),
             Ops::Start => return "start".to_string(),
+            Ops::Stop => return "stop".to_string(),
             _ => return "none".to_string(),
         }
     }
