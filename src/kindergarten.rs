@@ -78,4 +78,6 @@ impl Kindergarten {
             }
         }
     }
+
+    pub fn stop(&mut self, name: &string) -> Result<()> {}
 }

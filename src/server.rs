@@ -245,6 +245,7 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
             }
 
             //:= TODO: need stop logic
+            client::Ops::Stop => {}
             _ => (),
         }
     }
