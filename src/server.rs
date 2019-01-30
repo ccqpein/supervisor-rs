@@ -244,8 +244,10 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
                 }
             }
 
-            //:= TODO: need stop logic
-            client::Ops::Stop => {}
+            client::Ops::Stop => match kg.stop(command.child_name.as_ref().unwrap()) {
+                Ok(_) => (),
+                Err(e) => println!("{}", e),
+            },
             _ => (),
         }
     }

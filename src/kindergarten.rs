@@ -79,5 +79,26 @@ impl Kindergarten {
         }
     }
 
-    pub fn stop(&mut self, name: &string) -> Result<()> {}
+    pub fn stop(&mut self, name: &String) -> Result<()> {
+        //get id
+        let id = self.name_list.get(name).unwrap();
+        //get child_handle
+        let store_val = self.id_list.get_mut(&id).unwrap();
+        let child_handle = &mut (store_val.0);
+
+        //kill old child
+        if let Err(e) = child_handle.kill() {
+            println!("{:?}", e);
+            return Err(ioError::new(
+                ErrorKind::InvalidData,
+                format!("Cannot kill child {}, id is {}", name, id),
+            ));
+        }
+
+        //clean Kindergarten
+        self.id_list.remove(id);
+        self.name_list.remove(name);
+
+        Ok(())
+    }
 }
