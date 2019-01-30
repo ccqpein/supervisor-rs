@@ -8,7 +8,7 @@
 - [x] start processing when have new config in load path
 - [x] startup with particular server config
 - [x] restart processing
-- [ ] stop processing
+- [x] stop processing
 - [x] redirect stdout and stderr to log file
 - [ ] ~~compress log file when log file become huge~~
 - [x] client should talk with server's side supervisor-rs
@@ -55,3 +55,11 @@ After server application start, all **application yaml files under loadpath of s
 `client restart child0 on localhost` will restart processing `child0` on localhost;
 
 `client restart child0 on 198.0.0.2` will restart processing `child0` on 192.0.0.2, I assume you running server side application on this host;
+
+**Cross compiling**
+
+`brew tap filosottile/musl-cross && brew install FiloSottile/musl-cross/musl-cross`
+
+after install `musl-cross`, `which x86_64-linux-musl-gcc` will give a result, like `/usr/local/bin/x86_64-linux-musl-gcc`.
+
+then, `cargo build --target=x86_64-unknown-linux-musl`, there is no errors in my local machine.
