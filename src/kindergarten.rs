@@ -39,6 +39,7 @@ impl Kindergarten {
         self.register_name(name, id);
     }
 
+    //receive new config instead of read from kindergarten because maybe config change
     //Step:
     //1. kill old one
     //2. start new one
@@ -79,6 +80,7 @@ impl Kindergarten {
         }
     }
 
+    //stop child
     pub fn stop(&mut self, name: &String) -> Result<()> {
         //get id
         let id = self.name_list.get(name).unwrap();

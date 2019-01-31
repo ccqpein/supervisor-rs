@@ -83,6 +83,7 @@ impl Config {
         (split_comm[0].to_string(), None)
     }
 }
+
 impl Clone for Config {
     fn clone(&self) -> Self {
         Config {

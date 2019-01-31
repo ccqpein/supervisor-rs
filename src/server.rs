@@ -114,6 +114,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     //run command and give child handle
     let child = command
         .stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
+        .stderr(File::create(config.stderr.as_ref().unwrap()).unwrap())
         .spawn();
 
     match child {
@@ -128,17 +129,6 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
             ));
         }
     };
-}
-
-//for deamon to start new child
-//receive file path, make it to config, then start it
-//return id, config for deamon to update kindergarten
-pub fn start_new_child_with_file(filepath: &str) -> Result<(u32, Config)> {
-    let mut conf = Config::read_from_yaml_file(filepath)?;
-
-    start_new_child(&mut conf)?;
-
-    return Ok((conf.child_id.unwrap(), conf));
 }
 
 //Receive server config and start a new server
@@ -165,6 +155,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
         let mut child_config = Config::read_from_yaml_file(&conf.1)?;
 
         let child_handle = start_new_child(&mut child_config)?;
+
         //registe id
         let id = child_config.child_id.unwrap();
         kindergarten.register_id(id, child_handle, child_config);
