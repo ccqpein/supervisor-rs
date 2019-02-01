@@ -63,4 +63,11 @@ After server application start, all **application yaml files under loadpath of s
 
 after install `musl-cross`, `which x86_64-linux-musl-gcc` will give a result, like `/usr/local/bin/x86_64-linux-musl-gcc`.
 
+give configuration in `~/.cargo/config`
+
+```
+[target.x86_64-unknown-linux-musl]
+linker = "x86_64-linux-musl-gcc"
+```
+
 then, `cargo build --target=x86_64-unknown-linux-musl`, there is no errors in my local machine.
