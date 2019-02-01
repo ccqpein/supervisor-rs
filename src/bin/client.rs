@@ -7,6 +7,7 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use supervisor_rs::client::Command;
 
+//:= TODO: get response from server
 fn main() -> Result<()> {
     let arguments = env::args();
     let change_2_vec = arguments.collect::<Vec<String>>();

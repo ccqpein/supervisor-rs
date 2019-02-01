@@ -95,3 +95,26 @@ impl Clone for Config {
         }
     }
 }
+
+// tiny tests below
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use server::start_new_child;
+
+    #[test]
+    fn command_argvs() {
+        let con = dbg!(Config::read_from_yaml_file("./test/argv.yaml")).unwrap();
+        let (comm, argvs) = con.split_args();
+        //println!("{:?}", con.split_args());
+
+        println!("{:?}", argvs.unwrap().split(' ').collect::<Vec<&str>>());
+    }
+
+    #[test]
+    fn run_ls() {
+        let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml")).unwrap();
+
+        let _ = dbg!(start_new_child(&mut con));
+    }
+}

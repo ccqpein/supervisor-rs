@@ -99,6 +99,8 @@ impl ServerConfig {
 
 //start a child processing, and give child_handle
 //side effection: config.child_id be updated
+//:= TODO: stdout and stderr should have ability to append file
+//:= TODO: start and restart should have more detail
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
@@ -111,11 +113,25 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
         _ => (),
     };
 
+    //setting stdout and stderr file path
+    match &config.stdout {
+        Some(out) => {
+            command.stdout(File::create(out)?);
+            ()
+        }
+        None => (),
+    }
+
+    match &config.stderr {
+        Some(err) => {
+            command.stdout(File::create(err)?);
+            ()
+        }
+        None => (),
+    }
+
     //run command and give child handle
-    let child = command
-        .stdout(File::create(config.stdout.as_ref().unwrap()).unwrap())
-        .stderr(File::create(config.stderr.as_ref().unwrap()).unwrap())
-        .spawn();
+    let child = command.spawn();
 
     match child {
         Ok(ref c) => {
@@ -136,6 +152,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 //1. a way receive command from client //move to start_deamon
 //2. first start will start all children in config path
 //3. then keep listening commands and can restart each of them //move to start deamon
+//:= TODO: child is not server application, check logic is fine
 pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //Read server's config file
     let server_conf = if config_path == "" {
@@ -169,6 +186,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 //check all children are fine or not
 //if not fine, try to restart them
 //need channel input to update kindergarten
+//:= TODO: illegal command should return more details
 fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
         //println!("{:#?}", kg);
