@@ -12,6 +12,7 @@
 - [x] redirect stdout and stderr to log file
 - [ ] ~~compress log file when log file become huge~~
 - [x] client should talk with server's side supervisor-rs
+- [ ] help command
 
 Compress log file maybe not good ideas, change running processing's file handle is too much work for `supervisor-rs`. 
 
