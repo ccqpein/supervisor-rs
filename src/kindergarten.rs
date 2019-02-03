@@ -45,28 +45,13 @@ impl Kindergarten {
     //2. start new one
     //3. update kindergarten
     pub fn restart(&mut self, name: &String, config: &mut Config) -> Result<()> {
-        //get id
-        let id = self.name_list.get(name).unwrap();
-        //get child_handle
-        let store_val = self.id_list.get_mut(&id).unwrap();
-        let child_handle = &mut (store_val.0);
-
-        //kill old child
-        if let Err(e) = child_handle.kill() {
-            println!("{:?}", e);
-            return Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!("Cannot kill child {}, id is {}", name, id),
-            ));
-        }
+        self.stop(name)?;
 
         //start new child
         match start_new_child(config) {
             Ok(child) => {
                 //update kindergarten
                 let new_id = child.id();
-                //remove old id to make sure one-to-one relationship
-                self.id_list.remove(&id);
                 self.update(new_id, name, child, config.clone());
                 Ok(())
             }
@@ -74,7 +59,7 @@ impl Kindergarten {
                 println!("{:?}", e);
                 return Err(ioError::new(
                     ErrorKind::InvalidData,
-                    format!("Cannot kill child {}, id is {}", name, id),
+                    format!("Cannot start child {}", name),
                 ));
             }
         }
@@ -83,7 +68,19 @@ impl Kindergarten {
     //stop child
     pub fn stop(&mut self, name: &String) -> Result<()> {
         //get id
-        let id = self.name_list.get(name).unwrap();
+        let id = match self.name_list.get(name).as_ref() {
+            Some(id) => id,
+            None => &1,
+        };
+
+        //check if this name of child in kindergarden
+        if *id == 1 {
+            return Err(ioError::new(
+                ErrorKind::InvalidData,
+                format!("{} not exsit", name),
+            ));
+        }
+
         //get child_handle
         let store_val = self.id_list.get_mut(&id).unwrap();
         let child_handle = &mut (store_val.0);
@@ -101,6 +98,11 @@ impl Kindergarten {
         self.id_list.remove(id);
         self.name_list.remove(name);
 
+        Ok(())
+    }
+
+    //:= TODO: check if some command have done already, clean them
+    pub fn check_around(&mut self) -> Result<()> {
         Ok(())
     }
 }
