@@ -152,7 +152,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 //1. a way receive command from client //move to start_deamon
 //2. first start will start all children in config path
 //3. then keep listening commands and can restart each of them //move to start deamon
-//:= TODO: child is not server application, check logic is fine
+//:= TODO: child is not server application, check logic is fine, need use kg.check_around()
 pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //Read server's config file
     let server_conf = if config_path == "" {
@@ -189,7 +189,6 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 //:= TODO: illegal command should return more details
 fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
-        //println!("{:#?}", kg);
         let data = rec.recv().unwrap();
         let command = if let Ok(com) =
             client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())

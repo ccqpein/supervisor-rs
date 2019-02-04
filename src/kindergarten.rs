@@ -94,15 +94,40 @@ impl Kindergarten {
             ));
         }
 
-        //clean Kindergarten
-        self.id_list.remove(id);
-        self.name_list.remove(name);
+        self.delete_by_name(name)?;
 
         Ok(())
     }
 
-    //:= TODO: check if some command have done already, clean them
+    //check if some command have done already, clean them
+    //only return error if child_handle try_wait has problem
     pub fn check_around(&mut self) -> Result<()> {
+        let mut cache: Vec<String> = vec![];
+        for (name, id) in self.name_list.iter() {
+            let store_val = self.id_list.get_mut(id).unwrap();
+            let child_handle = &mut (store_val.0);
+
+            match child_handle.try_wait()? {
+                Some(_) => {
+                    cache.push(name.clone());
+                }
+                None => (),
+            }
+        }
+
+        for name in cache {
+            self.delete_by_name(&name)?;
+        }
+
+        Ok(())
+    }
+
+    //delete by name, won't return error if no name
+    pub fn delete_by_name(&mut self, name: &String) -> Result<()> {
+        if let Some(id) = self.name_list.remove(name) {
+            self.id_list.remove(&id);
+        }
+
         Ok(())
     }
 }
