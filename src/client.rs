@@ -72,7 +72,6 @@ impl Command {
         }
     }
 
-    //:= TODO: need find a way to parse string conveniently
     pub fn new_from_string(s: Vec<String>) -> Result<Self> {
         let mut re = Self::new();
 

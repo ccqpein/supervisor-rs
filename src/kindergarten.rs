@@ -40,11 +40,13 @@ impl Kindergarten {
     }
 
     //receive new config instead of read from kindergarten because maybe config change
+    //child which restart must be running child, so it can stop first
     //Step:
     //1. kill old one
     //2. start new one
     //3. update kindergarten
     pub fn restart(&mut self, name: &String, config: &mut Config) -> Result<()> {
+        //if this child is not running, it cannot be stopped, return err
         self.stop(name)?;
 
         //start new child
@@ -65,8 +67,13 @@ impl Kindergarten {
         }
     }
 
-    //stop child
+    //stop child, and delete it in kg, after this method, do not need delete child
     pub fn stop(&mut self, name: &String) -> Result<()> {
+        //if stop all
+        if name == "all" {
+            return self.stop_all();
+        }
+
         //get id
         let id = match self.name_list.get(name).as_ref() {
             Some(id) => id,
@@ -90,7 +97,7 @@ impl Kindergarten {
             println!("{:?}", e);
             return Err(ioError::new(
                 ErrorKind::InvalidData,
-                format!("Cannot kill child {}, id is {}", name, id),
+                format!("Cannot kill child {}, id is {}, err is {}", name, id, e),
             ));
         }
 
@@ -99,7 +106,18 @@ impl Kindergarten {
         Ok(())
     }
 
-    //:= TODO: should stop all
+    //stop all children
+    //:= TEST: need test
+    pub fn stop_all(&mut self) -> Result<()> {
+        let names =
+            { self.name_list.keys().into_iter().map(|x| x.clone()) }.collect::<Vec<String>>();
+
+        for name in names {
+            self.delete_by_name(&name)?;
+        }
+
+        Ok(())
+    }
 
     //check if some command have done already, clean them
     //only return error if child_handle try_wait has problem
@@ -131,5 +149,9 @@ impl Kindergarten {
         }
 
         Ok(())
+    }
+
+    pub fn has_child(&mut self, name: &String) -> Option<&u32> {
+        self.name_list.get(name)
     }
 }

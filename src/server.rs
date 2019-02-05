@@ -5,7 +5,7 @@ use super::Config;
 use std::error::Error;
 use std::fs;
 use std::fs::File;
-use std::io::{Error as ioError, ErrorKind, Read, Result};
+use std::io::{Error as ioError, ErrorKind, Read, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
 use std::sync::mpsc::{channel, Receiver, Sender};
@@ -100,7 +100,6 @@ impl ServerConfig {
 //start a child processing, and give child_handle
 //side effection: config.child_id be updated
 //:= TODO: stdout and stderr should have ability to append file
-//:= TODO: start and restart should have more detail
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
@@ -186,10 +185,16 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 //check all children are fine or not
 //if not fine, try to restart them
 //need channel input to update kindergarten
-//:= TODO: illegal command should return more details
 fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
         let data = rec.recv().unwrap();
+
+        //run check around here, clean all stopped children kicked off
+        //:= TEST: need test check around
+        if let Err(e) = kg.check_around() {
+            println!("{:?}", e);
+        }
+
         let command = if let Ok(com) =
             client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())
         {
@@ -226,6 +231,14 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
 
             // warm start a new child after its config yaml file put in loadpath
             client::Ops::Start => {
+                if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
+                    println!(
+                        "Cannot start this child {}, it already exsits",
+                        command.child_name.unwrap()
+                    );
+                    continue;
+                }
+
                 let server_conf = if kg.server_config_path == "" {
                     ServerConfig::load("/tmp/server.yml")
                 } else {
@@ -267,7 +280,14 @@ fn handle_client(mut stream: TcpStream, sd: Sender<String>) -> Result<()> {
     stream.read_to_end(&mut buf)?;
 
     let received_comm = String::from_utf8(buf).unwrap();
+    println!("done make string?");
     sd.send(received_comm).unwrap();
+    //:= DEBUG: deadlock here
+    println!("here? server side");
+
+    stream.write_all(
+        format!("server receives command, check server's log if something happen",).as_bytes(),
+    )?;
 
     Ok(())
 }

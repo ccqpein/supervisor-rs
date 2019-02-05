@@ -7,7 +7,6 @@ use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use supervisor_rs::client::Command;
 
-//:= TODO: get response from server
 fn main() -> Result<()> {
     let arguments = env::args();
     let change_2_vec = arguments.collect::<Vec<String>>();
@@ -60,5 +59,12 @@ fn main() -> Result<()> {
 
     //println!("{:?}", data_2_server);
     stream.write_all(data_2_server.as_bytes())?;
-    stream.flush()
+    stream.flush()?;
+
+    println!("here?");
+    let mut response = String::new();
+    stream.read_to_string(&mut response)?;
+    println!("{}", response);
+
+    Ok(())
 }
