@@ -104,9 +104,9 @@ mod tests {
 
     #[test]
     fn command_argvs() {
-        let con = dbg!(Config::read_from_yaml_file("./test/argv.yaml")).unwrap();
+        let con = dbg!(Config::read_from_yaml_file("./test/argv.yml")).unwrap();
         let (comm, argvs) = con.split_args();
-        //println!("{:?}", con.split_args());
+        println!("{:?}", con.split_args());
 
         println!("{:?}", argvs.unwrap().split(' ').collect::<Vec<&str>>());
     }

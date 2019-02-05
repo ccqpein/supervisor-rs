@@ -50,7 +50,7 @@ impl ServerConfig {
         for entry in fs::read_dir(self.load_path.clone())? {
             if let Ok(entry) = entry {
                 if let Some(extension) = entry.path().extension() {
-                    if extension == "yml" {
+                    if extension == "yml" || extension == "yaml" {
                         result.push((
                             entry
                                 .file_name()
@@ -73,7 +73,7 @@ impl ServerConfig {
         for entry in fs::read_dir(self.load_path.clone())? {
             if let Ok(entry) = entry {
                 if let Some(extension) = entry.path().extension() {
-                    if extension == "yml" {
+                    if extension == "yml" || extension == "yaml" {
                         if entry
                             .file_name()
                             .to_str()
@@ -124,7 +124,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 
     match &config.stderr {
         Some(err) => {
-            command.stdout(File::create(err)?);
+            command.stderr(File::create(err)?);
             ()
         }
         None => (),

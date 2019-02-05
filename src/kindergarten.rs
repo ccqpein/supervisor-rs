@@ -99,6 +99,8 @@ impl Kindergarten {
         Ok(())
     }
 
+    //:= TODO: should stop all
+
     //check if some command have done already, clean them
     //only return error if child_handle try_wait has problem
     pub fn check_around(&mut self) -> Result<()> {

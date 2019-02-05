@@ -5,3 +5,4 @@ GTAGS
 **/*.rs.bk
 Cargo.lock
 .DS_Store
+deploy.sh
