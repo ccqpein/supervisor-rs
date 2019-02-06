@@ -97,7 +97,7 @@ impl Command {
         let mut re = Self::new();
 
         if s.len() < 2 {
-            println!("wrong");
+            println!("Looks like command's not long enough");
             return Err(Error::new(ErrorKind::Other, "command parse wrong"));
         }
 

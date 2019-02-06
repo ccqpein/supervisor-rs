@@ -137,6 +137,7 @@ impl Kindergarten {
 
         for name in cache {
             self.delete_by_name(&name)?;
+            println!("{} has stopped, delete from kindergarden", name);
         }
 
         Ok(())

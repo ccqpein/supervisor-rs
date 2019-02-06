@@ -61,7 +61,6 @@ fn main() -> Result<()> {
     stream.write_all(data_2_server.as_bytes())?;
     stream.flush()?;
 
-    println!("here?");
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
     println!("{}", response);

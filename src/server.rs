@@ -92,7 +92,7 @@ impl ServerConfig {
 
         Err(ioError::new(
             ErrorKind::NotFound,
-            format!("Cannot found this file in load path"),
+            format!("Cannot found '{}' file in load path", filename),
         ))
     }
 }
@@ -189,8 +189,7 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
     loop {
         let data = rec.recv().unwrap();
 
-        //run check around here, clean all stopped children kicked off
-        //:= TEST: need test check around
+        //run check around here, clean all stopped children
         if let Err(e) = kg.check_around() {
             println!("{:?}", e);
         }
@@ -276,14 +275,15 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
 
 //get client TCP stream and send to channel
 fn handle_client(mut stream: TcpStream, sd: Sender<String>) -> Result<()> {
-    let mut buf = vec![];
-    stream.read_to_end(&mut buf)?;
+    let mut buf = [0; 100];
+    stream.read(&mut buf)?;
 
-    let received_comm = String::from_utf8(buf).unwrap();
-    println!("done make string?");
+    let mut buf_vec = buf.to_vec();
+    buf_vec.retain(|&x| x != 0);
+
+    let received_comm = String::from_utf8(buf_vec).unwrap();
+
     sd.send(received_comm).unwrap();
-    //:= DEBUG: deadlock here
-    println!("here? server side");
 
     stream.write_all(
         format!("server receives command, check server's log if something happen",).as_bytes(),
