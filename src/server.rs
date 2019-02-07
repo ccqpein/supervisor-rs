@@ -31,6 +31,7 @@ impl ServerConfig {
         let temp = YamlLoader::load_from_str(input);
         let mut result: Self;
 
+        //:= TODO: looks like it can easy to impl mutil load path
         match temp {
             Ok(docs) => {
                 let doc = &docs[0];
@@ -115,7 +116,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     //setting stdout and stderr file path
     match &config.stdout {
         Some(out) => {
-            command.stdout(File::create(out)?);
+            command.stdout(File::create(out.path.clone())?);
             ()
         }
         None => (),
@@ -123,7 +124,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 
     match &config.stderr {
         Some(err) => {
-            command.stderr(File::create(err)?);
+            command.stderr(File::create(err.path.clone())?);
             ()
         }
         None => (),
@@ -268,6 +269,9 @@ fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
                 Ok(_) => (),
                 Err(e) => println!("{}", e),
             },
+
+            //:= TODO: need done check feature
+            client::Ops::Check => {}
             _ => (),
         }
     }

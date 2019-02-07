@@ -1,3 +1,8 @@
-Command:
-  - /tmp/test -aaa bbb -ccc ddd
+command: /tmp/test -aaa bbb -ccc ddd
+output:
+  - stdout: aaaaaa
+    mode: create
+
+#  - stderr: nnnnn
+#    mode: append
   

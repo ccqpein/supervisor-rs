@@ -1,2 +1,1 @@
-Command:
-  - ls -al
+command: ls -al

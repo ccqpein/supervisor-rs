@@ -5,13 +5,93 @@ pub mod server;
 use std::error::Error;
 use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
-use yaml_rust::YamlLoader;
+use yaml_rust::{Yaml, YamlLoader};
+
+#[derive(Debug, Copy, Clone)]
+enum OutputMode {
+    Create,
+    Append,
+}
+
+#[derive(Debug, Clone)]
+struct Output {
+    path: String,
+    mode: OutputMode,
+}
+
+impl Output {
+    fn new(input: Yaml) -> Result<Vec<(String, Self)>> {
+        let lst = match input.into_vec() {
+            Some(lst) => lst,
+            None => {
+                return Err(ioError::new(
+                    ErrorKind::InvalidData,
+                    format!("output format wrong"),
+                ));
+            }
+        };
+
+        let mut result = vec![];
+
+        for hash in lst {
+            let mut temp = (
+                String::new(),
+                Self {
+                    path: String::new(),
+                    mode: OutputMode::Create,
+                },
+            );
+            for (p, m) in hash.into_hash().unwrap().iter() {
+                match p.as_str() {
+                    Some("mode") => match m.as_str() {
+                        Some("create") => temp.1.mode = OutputMode::Create,
+                        Some("append") => temp.1.mode = OutputMode::Append,
+                        _ => (),
+                    },
+                    Some("stdout") => match m.as_str() {
+                        Some(s) => {
+                            temp.1.path = s.to_string();
+                            temp.0 = "stdout".to_string()
+                        }
+                        None => {
+                            return Err(ioError::new(
+                                ErrorKind::InvalidData,
+                                format!("stdout no path"),
+                            ));
+                        }
+                    },
+                    Some("stderr") => match m.as_str() {
+                        Some(s) => {
+                            temp.1.path = s.to_string();
+                            temp.0 = "stderr".to_string()
+                        }
+                        None => {
+                            return Err(ioError::new(
+                                ErrorKind::InvalidData,
+                                format!("stderr no path"),
+                            ));
+                        }
+                    },
+                    _ => {
+                        return Err(ioError::new(
+                            ErrorKind::InvalidData,
+                            format!("output including illegal field"),
+                        ));
+                    }
+                }
+            }
+            result.push(temp);
+        }
+
+        Ok(result)
+    }
+}
 
 #[derive(Debug)]
 pub struct Config {
     comm: String,
-    stdout: Option<String>,
-    stderr: Option<String>,
+    stdout: Option<Output>,
+    stderr: Option<Output>,
     child_id: Option<u32>,
 }
 
@@ -25,16 +105,6 @@ impl Config {
         }
     }
 
-    pub fn new_stdout(mut self, stdout: String) -> Self {
-        self.stdout = Some(stdout);
-        self
-    }
-
-    pub fn new_stderr(mut self, stderr: String) -> Self {
-        self.stderr = Some(stderr);
-        self
-    }
-
     pub fn read_from_str(input: &str) -> Result<Self> {
         let temp = YamlLoader::load_from_str(input);
 
@@ -43,14 +113,17 @@ impl Config {
             Ok(docs) => {
                 let doc = &docs[0];
 
-                result = Self::new(doc["Command"][0].clone().into_string().unwrap());
+                result = Self::new(doc["command"].clone().into_string().unwrap());
 
-                if let Some(stdo) = doc["Stdout"][0].clone().into_string() {
-                    result = result.new_stdout(stdo)
-                }
-
-                if let Some(stde) = doc["Stderr"][0].clone().into_string() {
-                    result = result.new_stderr(stde);
+                if let Ok(output) = Output::new(doc["output"].clone()) {
+                    println!("this is output:{:?}", output);
+                    for (field, data) in output {
+                        if field == "stdout".to_string() {
+                            result.stdout = Some(data)
+                        } else if field == "stderr".to_string() {
+                            result.stderr = Some(data)
+                        }
+                    }
                 }
             }
 
@@ -90,7 +163,6 @@ impl Clone for Config {
             comm: self.comm.clone(),
             stdout: self.stdout.clone(),
             stderr: self.stderr.clone(),
-
             child_id: self.child_id,
         }
     }
@@ -113,8 +185,8 @@ mod tests {
 
     #[test]
     fn run_ls() {
-        let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml")).unwrap();
+        //let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml")).unwrap();
 
-        let _ = dbg!(start_new_child(&mut con));
+        //let _ = dbg!(start_new_child(&mut con));
     }
 }
