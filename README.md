@@ -13,6 +13,8 @@
 - [ ] ~~compress log file when log file become huge~~
 - [x] client should talk with server's side supervisor-rs
 - [ ] help command
+- [ ] server/client should talk to each other (maybe not too much)
+- [ ] server should has check feature and can return check result to client
 
 Compress log file maybe not good ideas, change running processing's file handle is too much work for `supervisor-rs`. 
 
@@ -25,18 +27,25 @@ Compress log file maybe not good ideas, change running processing's file handle 
 
 **config yaml file format**:
 
+server.yaml:
+
 ```yaml
 #server side config
 loadpath:
   - /tmp/client/
 ```
 
+each command's config:
+
 ```yaml
 #each child config in loadpath of server config
-Command:
-  - /tmp/test
-Stdout:
-  - /tmp/log
+command: /tmp/test
+output:
+  - stdout: aaaaaa
+    mode: create
+
+  - stderr: nnnnn
+    mode: append
 ```
 
 ## Usage ##
