@@ -8,7 +8,6 @@ use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread;
 use yaml_rust::YamlLoader;
 
@@ -185,258 +184,9 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     Ok(kindergarten)
 }
 
-//check all children are fine or not
-//if not fine, try to restart them
-//need channel input to update kindergarten
-fn day_care(mut kg: Kindergarten, rec: Receiver<String>) {
-    loop {
-        let data = rec.recv().unwrap();
-
-        //run check around here, clean all stopped children
-        if let Err(e) = kg.check_around() {
-            println!("{:?}", e);
-        }
-
-        let command = if let Ok(com) =
-            client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())
-        {
-            com
-        } else {
-            continue;
-        };
-
-        match command.op {
-            client::Ops::Restart => {
-                let server_conf = if kg.server_config_path == "" {
-                    ServerConfig::load("/tmp/server.yml")
-                } else {
-                    ServerConfig::load(&kg.server_config_path)
-                };
-
-                match server_conf {
-                    Ok(s_conf) => {
-                        match s_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {
-                            Ok(mut conf) => {
-                                match kg.restart(command.child_name.as_ref().unwrap(), &mut conf) {
-                                    Ok(_) => (),
-                                    Err(e) => println!("{}", e),
-                                }
-                            }
-                            Err(e) => {
-                                println!("{:?}", e);
-                            }
-                        }
-                    }
-                    Err(e) => println!("Cannot re-load server's config file, {}", e),
-                }
-            }
-
-            // warm start a new child after its config yaml file put in loadpath
-            client::Ops::Start => {
-                if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
-                    println!(
-                        "Cannot start this child {}, it already exsits",
-                        command.child_name.unwrap()
-                    );
-                    continue;
-                }
-
-                let server_conf = if kg.server_config_path == "" {
-                    ServerConfig::load("/tmp/server.yml")
-                } else {
-                    ServerConfig::load(&kg.server_config_path)
-                };
-
-                match server_conf {
-                    Ok(s_conf) => {
-                        match s_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {
-                            Ok(mut conf) => match start_new_child(&mut conf) {
-                                Ok(child_handle) => {
-                                    let id = conf.child_id.unwrap();
-                                    kg.register_id(id, child_handle, conf);
-                                    kg.register_name(&command.child_name.unwrap(), id);
-                                }
-                                Err(e) => println!("{:?}", e),
-                            },
-                            Err(e) => {
-                                println!("{:?}", e);
-                            }
-                        }
-                    }
-                    Err(e) => println!("Cannot re-load server's config file, {}", e),
-                }
-            }
-
-            client::Ops::Stop => match kg.stop(command.child_name.as_ref().unwrap()) {
-                Ok(_) => (),
-                Err(e) => println!("{}", e),
-            },
-
-            //:= TODO: need done check feature
-            client::Ops::Check => {}
-            _ => (),
-        }
-    }
-}
-
-//get client TCP stream and send to channel
-fn handle_client(mut stream: TcpStream, sd: Sender<String>) -> Result<()> {
-    let mut buf = [0; 100];
-    stream.read(&mut buf)?;
-
-    let mut buf_vec = buf.to_vec();
-    buf_vec.retain(|&x| x != 0);
-
-    let received_comm = String::from_utf8(buf_vec).unwrap();
-
-    sd.send(received_comm).unwrap();
-
-    stream.write_all(
-        format!("server receives command, check server's log if something happen",).as_bytes(),
-    )?;
-
-    Ok(())
-}
-
 //start a listener for client commands
 //keep taking care children
-pub fn start_deamon(kg: Kindergarten) -> Result<(thread::JoinHandle<()>, thread::JoinHandle<()>)> {
-    //channel used to communicate from listener and day care
-    let (sender, receiver) = channel::<String>();
-
-    //start TCP listener to receive client commands
-    let listener = TcpListener::bind(format!("{}:{}", "0.0.0.0", 33889))?;
-    let handler_of_client = thread::spawn(move || {
-        for stream in listener.incoming() {
-            match stream {
-                Ok(stream) => {
-                    let thread_sender = sender.clone();
-                    if let Err(e) = handle_client(stream, thread_sender) {
-                        println!("{}", e);
-                    };
-                }
-                Err(e) => println!("{}", e),
-            }
-        }
-    });
-
-    //let kg = Kindergarten::new();
-    let handler_of_day_care = thread::spawn(move || {
-        day_care(kg, receiver);
-    });
-
-    Ok((handler_of_client, handler_of_day_care))
-}
-
-fn day_care_2(kig: Arc<Mutex<Kindergarten>>, data: String) -> String {
-    //:= TODO: need recover poisoned mutex
-    let mut kg = kig.lock().unwrap();
-
-    //run check around here, clean all stopped children
-    if let Err(e) = kg.check_around() {
-        println!("{:?}", e);
-    }
-
-    let command = if let Ok(com) =
-        client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())
-    {
-        com
-    } else {
-        return "".to_string();
-    };
-
-    match command.op {
-        client::Ops::Restart => {
-            let server_conf = if kg.server_config_path == "" {
-                ServerConfig::load("/tmp/server.yml")
-            } else {
-                ServerConfig::load(&kg.server_config_path)
-            };
-
-            match server_conf {
-                Ok(s_conf) => {
-                    match s_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {
-                        Ok(mut conf) => {
-                            match kg.restart(command.child_name.as_ref().unwrap(), &mut conf) {
-                                Ok(_) => (),
-                                Err(e) => {
-                                    println!("{}", e);
-                                }
-                            };
-                            return "".to_string();
-                        }
-                        Err(e) => {
-                            println!("{:?}", e);
-                        }
-                    }
-                    return "".to_string();
-                }
-                Err(e) => {
-                    println!("Cannot re-load server's config file, {}", e);
-                    return "".to_string();
-                }
-            }
-        }
-
-        // warm start a new child after its config yaml file put in loadpath
-        client::Ops::Start => {
-            if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
-                println!(
-                    "Cannot start this child {}, it already exsits",
-                    command.child_name.unwrap()
-                );
-                return "".to_string();
-            }
-
-            let server_conf = if kg.server_config_path == "" {
-                ServerConfig::load("/tmp/server.yml")
-            } else {
-                ServerConfig::load(&kg.server_config_path)
-            };
-
-            match server_conf {
-                Ok(s_conf) => {
-                    match s_conf.find_config_by_name(command.child_name.as_ref().unwrap()) {
-                        Ok(mut conf) => match start_new_child(&mut conf) {
-                            Ok(child_handle) => {
-                                let id = conf.child_id.unwrap();
-                                kg.register_id(id, child_handle, conf);
-                                kg.register_name(&command.child_name.unwrap(), id);
-                            }
-                            Err(e) => println!("{:?}", e),
-                        },
-                        Err(e) => {
-                            println!("{:?}", e);
-                        }
-                    }
-                    return "".to_string();
-                }
-                Err(e) => {
-                    println!("Cannot re-load server's config file, {}", e);
-                    return "".to_string();
-                }
-            }
-        }
-
-        client::Ops::Stop => match kg.stop(command.child_name.as_ref().unwrap()) {
-            Ok(_) => return "".to_string(),
-            Err(e) => {
-                println!("{}", e);
-                return "".to_string();
-            }
-        },
-
-        //:= TODO: need done check feature
-        client::Ops::Check => {
-            return "".to_string();
-        }
-        _ => {
-            return "".to_string();
-        }
-    }
-}
-
-pub fn start_deamon_2(kg: Kindergarten) -> Result<()> {
+pub fn start_deamon(kg: Kindergarten) -> Result<()> {
     let safe_kg = Arc::new(Mutex::new(kg));
 
     //start TCP listener to receive client commands
@@ -446,12 +196,11 @@ pub fn start_deamon_2(kg: Kindergarten) -> Result<()> {
         match stream {
             Ok(stream) => {
                 let this_kg = Arc::clone(&safe_kg);
-                thread::spawn(move || {
-                    if let Err(e) = handle_client_2(stream, this_kg) {
+                let _ = thread::spawn(move || {
+                    if let Err(e) = handle_client(stream, this_kg) {
                         println!("{}", e);
                     };
                 });
-                ()
             }
 
             Err(e) => println!("{}", e),
@@ -461,7 +210,8 @@ pub fn start_deamon_2(kg: Kindergarten) -> Result<()> {
     Ok(())
 }
 
-fn handle_client_2(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<()> {
+//get client TCP stream and send to channel
+fn handle_client(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<()> {
     let mut buf = [0; 100];
     stream.read(&mut buf)?;
 
@@ -469,10 +219,92 @@ fn handle_client_2(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Resul
     buf_vec.retain(|&x| x != 0);
 
     let received_comm = String::from_utf8(buf_vec).unwrap();
-    let _ = day_care_2(kg, received_comm);
-    stream.write_all(
-        format!("server receives command, check server's log if something ",).as_bytes(),
-    )?;
+    match day_care(kg, received_comm) {
+        Ok(resp) => stream.write_all(format!("server response: {}", resp).as_bytes()),
+        Err(e) => {
+            stream.write_all(format!("server response error: {}", e).as_bytes())?;
+            Err(e)
+        }
+    }
+}
 
-    Ok(())
+//check all children are fine or not
+//if not fine, try to restart them
+//need channel input to update kindergarten
+fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
+    //:= TODO: need recover poisoned mutex
+    let mut kg = kig.lock().unwrap();
+
+    //run check around here, clean all stopped children
+    kg.check_around()?;
+
+    let command = client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())?;
+
+    match command.op {
+        client::Ops::Restart => {
+            let server_conf = if kg.server_config_path == "" {
+                ServerConfig::load("/tmp/server.yml")?
+            } else {
+                ServerConfig::load(&kg.server_config_path)?
+            };
+
+            let mut conf = server_conf.find_config_by_name(command.child_name.as_ref().unwrap())?;
+
+            match kg.restart(command.child_name.as_ref().unwrap(), &mut conf) {
+                Ok(_) => Ok(format!(
+                    "restart {} success",
+                    command.child_name.as_ref().unwrap()
+                )),
+                Err(e) => Err(e),
+            }
+        }
+
+        // warm start a new child after its config yaml file put in loadpath
+        client::Ops::Start => {
+            if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
+                return Err(ioError::new(
+                    ErrorKind::Other,
+                    format!(
+                        "Cannot start this child {}, it already exsits",
+                        command.child_name.unwrap()
+                    ),
+                ));
+            }
+
+            let server_conf = if kg.server_config_path == "" {
+                ServerConfig::load("/tmp/server.yml")?
+            } else {
+                ServerConfig::load(&kg.server_config_path)?
+            };
+
+            let mut conf = server_conf.find_config_by_name(command.child_name.as_ref().unwrap())?;
+            match start_new_child(&mut conf) {
+                Ok(child_handle) => {
+                    let id = conf.child_id.unwrap();
+                    kg.register_id(id, child_handle, conf);
+                    kg.register_name(command.child_name.as_ref().unwrap(), id);
+                    Ok(format!(
+                        "start {} success",
+                        command.child_name.as_ref().unwrap()
+                    ))
+                }
+                Err(e) => Err(e),
+            }
+        }
+
+        client::Ops::Stop => match kg.stop(command.child_name.as_ref().unwrap()) {
+            Ok(_) => {
+                return Ok(format!(
+                    "stop {} success",
+                    command.child_name.as_ref().unwrap()
+                ));
+            }
+            Err(e) => Err(e),
+        },
+
+        //:= TODO: need done check feature
+        client::Ops::Check => Ok("".to_string()),
+
+        _ => Ok("".to_string()),
+    }
 }

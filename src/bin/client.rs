@@ -12,8 +12,6 @@ fn main() -> Result<()> {
     let change_2_vec = arguments.collect::<Vec<String>>();
     let cache_command = Command::new_from_string(change_2_vec[1..].to_vec())?;
 
-    //println!("{:?}", cache_command);
-
     let mut stream = if let Some(_) = cache_command.prep {
         //parse ip address
         let addr = if let Some(des) = cache_command.obj {
