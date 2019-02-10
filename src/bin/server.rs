@@ -15,7 +15,7 @@ fn main() {
     } else {
         server::start_new_server("")
     };
-
+    /*
     let (a, b) = match k {
         Ok(kk) => server::start_deamon(kk).unwrap(),
         Err(e) => {
@@ -28,5 +28,7 @@ fn main() {
     };
 
     a.join().unwrap();
-    b.join().unwrap();
+    b.join().unwrap();*/
+
+    server::start_deamon_2(k.unwrap()).unwrap();
 }

@@ -84,7 +84,7 @@ impl Kindergarten {
         if *id == 1 {
             return Err(ioError::new(
                 ErrorKind::InvalidData,
-                format!("{} not exsit", name),
+                format!("{} not exsit, cannot stop", name),
             ));
         }
 
