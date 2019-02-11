@@ -52,10 +52,11 @@ output:
 
 **Server Side**
 
-Start server side application. After compiled, run `server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. 
+Start server side application. After compiled, run `server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config given, supervisor will going to find `server.yml` in `/tmp`.
 
+After server application start, all **application yaml files under loadpath of server config** will be ran by application. So, that's means every yaml files in there should be legal application config file, or server cannot start.
 
-After server application start, all **application yaml files under loadpath of server config** will be ran by application. So, that's means every yaml files in there should be legal application config file.
+Each sub-processing is named with **filename** of yaml file. 
 
 
 **Client Side**
@@ -65,6 +66,16 @@ After server application start, all **application yaml files under loadpath of s
 `client restart child0 on localhost` will restart processing `child0` on localhost;
 
 `client restart child0 on 198.0.0.2` will restart processing `child0` on 192.0.0.2, I assume you running server side application on this host;
+
+commands:
+
+| command | behavior                                                                                                 |
+| ---     | ---                                                                                                      |
+| restart | restart child on server. this child has to be running (server application). Otherwise, use start instead |
+| start   | start new child. This command can start one-time command, or new config just put in loadpath             |
+| stop    | stop running child. Have to supply child name. If want to stop all children, use `stop all`              |
+
+
 
 **Cross compiling**
 

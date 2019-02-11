@@ -107,13 +107,12 @@ impl Kindergarten {
     }
 
     //stop all children
-    //:= TEST: need test
     pub fn stop_all(&mut self) -> Result<()> {
         let names =
             { self.name_list.keys().into_iter().map(|x| x.clone()) }.collect::<Vec<String>>();
 
         for name in names {
-            self.delete_by_name(&name)?;
+            self.stop(&name)?;
         }
 
         Ok(())

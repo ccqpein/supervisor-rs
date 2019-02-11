@@ -116,7 +116,6 @@ impl Config {
                 result = Self::new(doc["command"].clone().into_string().unwrap());
 
                 if let Ok(output) = Output::new(doc["output"].clone()) {
-                    println!("this is output:{:?}", output);
                     for (field, data) in output {
                         if field == "stdout".to_string() {
                             result.stdout = Some(data)
