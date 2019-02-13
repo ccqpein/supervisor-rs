@@ -154,4 +154,22 @@ impl Kindergarten {
     pub fn has_child(&mut self, name: &String) -> Option<&u32> {
         self.name_list.get(name)
     }
+
+    pub fn check_status(&mut self) -> Result<String> {
+        //first check_around
+        self.check_around()?;
+
+        let mut res = String::new();
+
+        for (name, id) in self.name_list.iter() {
+            res.push_str(&format!(
+                "child: {}\nprocessing id: {}\nconfig: {:?}",
+                name,
+                id,
+                self.id_list.get(id)
+            ));
+        }
+
+        Ok(res)
+    }
 }

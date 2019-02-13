@@ -6,6 +6,7 @@ pub enum Ops {
     Stop,
     Start,
 
+    Kill,
     Check,
     None,
 }
@@ -18,6 +19,7 @@ impl Ops {
             "Start" | "start" => return Ops::Start,
             "Stop" | "stop" => return Ops::Stop,
             "Check" | "check" => return Ops::Check,
+            "Kill" | "kill" => return Ops::Kill,
             _ => {
                 println!("does not support {}", s);
                 return Ops::None;
@@ -31,6 +33,7 @@ impl Ops {
             Ops::Start => return "start".to_string(),
             Ops::Stop => return "stop".to_string(),
             Ops::Check => return "check".to_string(),
+            Ops::Kill => return "kill".to_string(),
             _ => return "none".to_string(),
         }
     }

@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
+use std::sync::mpsc::Sender;
 use std::thread;
 use yaml_rust::YamlLoader;
 
@@ -153,7 +154,6 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 //1. a way receive command from client //move to start_deamon
 //2. first start will start all children in config path
 //3. then keep listening commands and can restart each of them //move to start deamon
-//:= TODO: child is not server application, check logic is fine, need use kg.check_around()
 pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //Read server's config file
     let server_conf = if config_path == "" {
@@ -186,7 +186,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
 //start a listener for client commands
 //keep taking care children
-pub fn start_deamon(kg: Kindergarten) -> Result<()> {
+pub fn start_deamon(kg: Kindergarten, sd: Sender<(String, String)>) -> Result<()> {
     let safe_kg = Arc::new(Mutex::new(kg));
 
     //start TCP listener to receive client commands
@@ -196,9 +196,22 @@ pub fn start_deamon(kg: Kindergarten) -> Result<()> {
         match stream {
             Ok(stream) => {
                 let this_kg = Arc::clone(&safe_kg);
+                let sd_ = Sender::clone(&sd);
                 let _ = thread::spawn(move || {
+                    //run handle_client and catch error if has
                     if let Err(e) = handle_client(stream, this_kg) {
-                        println!("{}", e);
+                        //hard check if it is suicide operation, because I only care this message so far.
+                        //this operation isn't in handle_client because it has make sure return to client..
+                        //..first
+                        let (first, second) = e.description().split_at(12);
+                        if first == "I am dying. " {
+                            println!("{}", second.to_string());
+                            //tell main thread,
+                            sd_.send((first.to_string(), second.to_string())).unwrap();
+                        } else {
+                            //if just normal error
+                            println!("{}", e.description());
+                        }
                     };
                 });
             }
@@ -222,7 +235,7 @@ fn handle_client(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<
     match day_care(kg, received_comm) {
         Ok(resp) => stream.write_all(format!("server response: {}", resp).as_bytes()),
         Err(e) => {
-            stream.write_all(format!("server response error: {}", e).as_bytes())?;
+            stream.write_all(format!("server response error: {}", e.description()).as_bytes())?;
             Err(e)
         }
     }
@@ -259,7 +272,7 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             }
         }
 
-        // warm start a new child after its config yaml file put in loadpath
+        // hot start a new child after its config yaml file put in loadpath
         client::Ops::Start => {
             if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
                 return Err(ioError::new(
@@ -301,6 +314,21 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             }
             Err(e) => Err(e),
         },
+
+        // kill supervisor itself
+        client::Ops::Kill => {
+            let mut last_will = String::new();
+            // step1: stop all
+            if let Err(e) = kg.stop(&"all".to_string()) {
+                last_will.push_str(&format!("there is error when stop all {}", e.description()));
+            }
+
+            // step2: return special err outside, let deamon know and stop
+            Err(ioError::new(
+                ErrorKind::Other,
+                format!("I am dying. last error: {}", last_will),
+            ))
+        }
 
         //:= TODO: need done check feature
         client::Ops::Check => Ok("".to_string()),

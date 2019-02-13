@@ -1,5 +1,7 @@
 use std::env;
 use std::io::Result;
+use std::sync::mpsc;
+use std::thread;
 use supervisor_rs::server;
 
 fn main() -> Result<()> {
@@ -17,5 +19,19 @@ fn main() -> Result<()> {
         server::start_new_server("")?
     };
 
-    server::start_deamon(k)
+    //make channel for deamon & main communication
+    let (tx, rx) = mpsc::channel();
+
+    //use an additional thread to handle deamon, and send message out.
+    let _ = thread::spawn(move || server::start_deamon(k, tx));
+
+    //handle message
+    for (f, _) in rx {
+        if f == "I am dying. " {
+            println!("see you!");
+            return Ok(());
+        }
+    }
+
+    Ok(())
 }
