@@ -163,10 +163,10 @@ impl Kindergarten {
 
         for (name, id) in self.name_list.iter() {
             res.push_str(&format!(
-                "child: {}\nprocessing id: {}\nconfig: {:?}",
+                "child: {}\n  processing id: {}\n  config: {:?}\n",
                 name,
                 id,
-                self.id_list.get(id)
+                self.id_list.get(id).unwrap().1
             ));
         }
 

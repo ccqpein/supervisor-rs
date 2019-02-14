@@ -17,7 +17,7 @@ use std::sync::{Arc, Mutex};
 #[derive(Debug)]
 struct ServerConfig {
     //path for all children's configs
-    load_path: String,
+    load_paths: Vec<String>,
 }
 
 impl ServerConfig {
@@ -31,15 +31,20 @@ impl ServerConfig {
 
     fn read_from_str(input: &str) -> Result<Self> {
         let temp = YamlLoader::load_from_str(input);
-        let mut result: Self;
+        let mut result: Self = ServerConfig { load_paths: vec![] };
 
-        //:= TODO: looks like it can easy to impl mutil load path
         match temp {
             Ok(docs) => {
                 let doc = &docs[0];
-                result = ServerConfig {
-                    load_path: doc["loadpath"][0].clone().into_string().unwrap(),
-                }
+                let paths = match doc["loadpaths"].as_vec() {
+                    Some(v) => v
+                        .iter()
+                        .map(|x| x.clone().into_string().unwrap())
+                        .collect::<Vec<String>>(),
+                    None => return Ok(result),
+                };
+
+                result = ServerConfig { load_paths: paths }
             }
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
@@ -50,20 +55,22 @@ impl ServerConfig {
     //return vec of (filename, path)
     fn all_ymls_in_load_path(&self) -> Result<Vec<(String, String)>> {
         let mut result: Vec<(String, String)> = vec![];
-        for entry in fs::read_dir(self.load_path.clone())? {
-            if let Ok(entry) = entry {
-                if let Some(extension) = entry.path().extension() {
-                    if extension == "yml" || extension == "yaml" {
-                        result.push((
-                            entry
-                                .file_name()
-                                .to_str()
-                                .unwrap()
-                                .split('.')
-                                .collect::<Vec<&str>>()[0]
-                                .to_string(),
-                            entry.path().to_str().unwrap().to_string(),
-                        ));
+        for path in self.load_paths.clone() {
+            for entry in fs::read_dir(path)? {
+                if let Ok(entry) = entry {
+                    if let Some(extension) = entry.path().extension() {
+                        if extension == "yml" || extension == "yaml" {
+                            result.push((
+                                entry
+                                    .file_name()
+                                    .to_str()
+                                    .unwrap()
+                                    .split('.')
+                                    .collect::<Vec<&str>>()[0]
+                                    .to_string(),
+                                entry.path().to_str().unwrap().to_string(),
+                            ));
+                        }
                     }
                 }
             }
@@ -73,20 +80,22 @@ impl ServerConfig {
 
     //return whole path of file which match filename
     fn find_config_by_name(&self, filename: &String) -> Result<Config> {
-        for entry in fs::read_dir(self.load_path.clone())? {
-            if let Ok(entry) = entry {
-                if let Some(extension) = entry.path().extension() {
-                    if extension == "yml" || extension == "yaml" {
-                        if entry
-                            .file_name()
-                            .to_str()
-                            .unwrap()
-                            .split('.')
-                            .collect::<Vec<&str>>()[0]
-                            .to_string()
-                            == *filename
-                        {
-                            return Config::read_from_yaml_file(entry.path().to_str().unwrap());
+        for path in self.load_paths.clone() {
+            for entry in fs::read_dir(path)? {
+                if let Ok(entry) = entry {
+                    if let Some(extension) = entry.path().extension() {
+                        if extension == "yml" || extension == "yaml" {
+                            if entry
+                                .file_name()
+                                .to_str()
+                                .unwrap()
+                                .split('.')
+                                .collect::<Vec<&str>>()[0]
+                                .to_string()
+                                == *filename
+                            {
+                                return Config::read_from_yaml_file(entry.path().to_str().unwrap());
+                            }
                         }
                     }
                 }
@@ -233,9 +242,9 @@ fn handle_client(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<
 
     let received_comm = String::from_utf8(buf_vec).unwrap();
     match day_care(kg, received_comm) {
-        Ok(resp) => stream.write_all(format!("server response: {}", resp).as_bytes()),
+        Ok(resp) => stream.write_all(format!("server response: \n{}", resp).as_bytes()),
         Err(e) => {
-            stream.write_all(format!("server response error: {}", e.description()).as_bytes())?;
+            stream.write_all(format!("server response error: \n{}", e.description()).as_bytes())?;
             Err(e)
         }
     }
@@ -249,6 +258,8 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
     let mut kg = kig.lock().unwrap();
 
     //run check around here, clean all stopped children
+    //check operation has its own check_around too, check_around here..
+    //..for other operations.
     kg.check_around()?;
 
     let command = client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())?;
@@ -315,6 +326,54 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             Err(e) => Err(e),
         },
 
+        //try start will force start child:
+        //if it is running, call restart.
+        //if it has stopped for some reason, start it
+        client::Ops::TryStart => {
+            let mut resp = String::new();
+
+            //check if it is running, stop it or not.
+            if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
+                resp.push_str("this child already start, stop it first.\n");
+                match kg.stop(command.child_name.as_ref().unwrap()) {
+                    Ok(_) => {
+                        resp.push_str(&format!(
+                            "stop {} success, start it again.\n",
+                            command.child_name.as_ref().unwrap()
+                        ));
+                    }
+                    Err(e) => {
+                        return Err(ioError::new(
+                            ErrorKind::InvalidData,
+                            format!("stop failed, error: {}\n", e.description()),
+                        ));
+                    }
+                }
+            }
+
+            //start it again, same as Ops::Start branch
+            let server_conf = if kg.server_config_path == "" {
+                ServerConfig::load("/tmp/server.yml")?
+            } else {
+                ServerConfig::load(&kg.server_config_path)?
+            };
+
+            let mut conf = server_conf.find_config_by_name(command.child_name.as_ref().unwrap())?;
+            match start_new_child(&mut conf) {
+                Ok(child_handle) => {
+                    let id = conf.child_id.unwrap();
+                    kg.register_id(id, child_handle, conf);
+                    kg.register_name(command.child_name.as_ref().unwrap(), id);
+                    resp.push_str(&format!(
+                        "start {} success",
+                        command.child_name.as_ref().unwrap()
+                    ));
+                    Ok(resp)
+                }
+                Err(e) => Err(e),
+            }
+        }
+
         // kill supervisor itself
         client::Ops::Kill => {
             let mut last_will = String::new();
@@ -331,7 +390,7 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         }
 
         //:= TODO: need done check feature
-        client::Ops::Check => Ok("".to_string()),
+        client::Ops::Check => kg.check_status(),
 
         _ => Ok("".to_string()),
     }

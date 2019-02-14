@@ -1,2 +1,2 @@
-loadpath:
+loadpaths:
   - ./test/client

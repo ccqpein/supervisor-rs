@@ -10,11 +10,10 @@
 - [x] restart processing
 - [x] stop processing
 - [x] redirect stdout and stderr to log file
-- [ ] ~~compress log file when log file become huge~~
 - [x] client should talk with server's side supervisor-rs
 - [ ] help command
-- [ ] server/client should talk to each other (maybe not too much)
-- [ ] server should has check feature and can return check result to client
+- [x] server/client should talk to each other (maybe not too much)
+- [x] server should has check feature and can return check result to client
 
 Compress log file maybe not good ideas, change running processing's file handle is too much work for `supervisor-rs`. 
 
@@ -31,7 +30,7 @@ server.yaml:
 
 ```yaml
 #server side config
-loadpath:
+loadpaths:
   - /tmp/client/
 ```
 
@@ -69,11 +68,14 @@ Each sub-processing is named with **filename** of yaml file.
 
 commands:
 
-| command | behavior                                                                                                 |
-| ---     | ---                                                                                                      |
-| restart | restart child on server. this child has to be running (server application). Otherwise, use start instead |
-| start   | start new child. This command can start one-time command, or new config just put in loadpath             |
-| stop    | stop running child. Have to supply child name. If want to stop all children, use `stop all`              |
+| command  | behavior                                                                                                                                                                                                                                                                                   |
+| ---      | ---                                                                                                                                                                                                                                                                                        |
+| restart  | restart child on server. this child has to be running (server application). Otherwise, use start instead                                                                                                                                                                                   |
+| start    | start new child. This command can start one-time command, or new config just put in loadpath(s). And, start does not care what's happen in child itself. If it start and panic immediately, supervisor will return success message anyway. Use `check` command to check if it runs or not. |
+| stop     | stop running child. Have to supply child name. If want to stop all children, use `stop all`                                                                                                                                                                                                |
+| check    | return summary of all children who are **running**. If children are not running, no matter what reason, they will be cleaned from kindergarden's table.                                                                                                                                    |
+| trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
+
 
 
 
