@@ -6,4 +6,5 @@
 - [X] need done check feature
 - [X] impl kill all feature (stop all + kill itself)
 - [X] impl try start feature (high priority)
-- [ ] check/stop/kill these commands maybe do not need `name` (need nice parser) (high priority)
+- [X] check/kill these commands maybe do not need `name` (need nice parser) (high priority)
+- [ ] check can just check one child

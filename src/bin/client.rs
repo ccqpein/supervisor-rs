@@ -14,11 +14,15 @@ fn main() -> Result<()> {
 
     let mut stream = if let Some(_) = cache_command.prep {
         //parse ip address
+        //only accept ip address
         let addr = if let Some(des) = cache_command.obj {
             match des.parse::<IpAddr>() {
                 Ok(ad) => ad,
                 Err(e) => {
-                    println!("something wrong when parse des ip address: {}", e);
+                    println!(
+                        "something wrong when parse des ip address: {}, use 127.0.0.1 instead",
+                        e
+                    );
                     "127.0.0.1".parse::<IpAddr>().unwrap()
                 }
             }
@@ -52,7 +56,7 @@ fn main() -> Result<()> {
     let data_2_server = format!(
         "{} {}",
         cache_command.op.to_string(),
-        cache_command.child_name.unwrap()
+        cache_command.child_name.unwrap_or(String::new())
     );
 
     //println!("{:?}", data_2_server);

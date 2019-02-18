@@ -9,22 +9,24 @@ pub enum Ops {
 
     Kill,
     Check,
-    None,
 }
 
 //Ops is struct of operations of client commands
 impl Ops {
-    fn from_str(s: &str) -> Self {
+    fn from_str(s: &str) -> Result<Self> {
         match s {
-            "Restart" | "restart" => return Ops::Restart,
-            "Start" | "start" => return Ops::Start,
-            "Stop" | "stop" => return Ops::Stop,
-            "Check" | "check" => return Ops::Check,
-            "Kill" | "kill" => return Ops::Kill,
-            "TryStart" | "Trystart" | "trystart" => return Ops::TryStart,
+            "Restart" | "restart" => return Ok(Ops::Restart),
+            "Start" | "start" => return Ok(Ops::Start),
+            "Stop" | "stop" => return Ok(Ops::Stop),
+            "Check" | "check" => return Ok(Ops::Check),
+            "Kill" | "kill" => return Ok(Ops::Kill),
+            "TryStart" | "Trystart" | "trystart" => return Ok(Ops::TryStart),
             _ => {
                 println!("does not support {}", s);
-                return Ops::None;
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    "no legal operations input",
+                ));
             }
         }
     }
@@ -37,7 +39,6 @@ impl Ops {
             Ops::Check => return "check".to_string(),
             Ops::Kill => return "kill".to_string(),
             Ops::TryStart => return "trystart".to_string(),
-            _ => return "none".to_string(),
         }
     }
 }
@@ -45,20 +46,20 @@ impl Ops {
 #[derive(Debug)]
 pub enum Prepositions {
     On,
-    None,
 }
 
 impl Prepositions {
-    fn from_str(s: &str) -> Self {
+    fn from_str(s: &str) -> Result<Self> {
         match s {
-            "On" | "on" => return Prepositions::On,
+            "On" | "on" => return Ok(Prepositions::On),
             "" => {
-                println!("you miss prepositions");
-                return Prepositions::None;
+                return Err(Error::new(ErrorKind::InvalidInput, "you miss prepositions"));
             }
             _ => {
-                println!("does not support {}", s);
-                return Prepositions::None;
+                return Err(Error::new(
+                    ErrorKind::InvalidInput,
+                    format!("does not support {}", s),
+                ));
             }
         }
     }
@@ -73,9 +74,9 @@ pub struct Command {
 }
 
 impl Command {
-    pub fn new() -> Self {
+    pub fn new(op: Ops) -> Self {
         Command {
-            op: Ops::None,
+            op: op,
             child_name: None,
             prep: None,
             obj: None,
@@ -83,20 +84,20 @@ impl Command {
     }
 
     pub fn new_from_string(s: Vec<String>) -> Result<Self> {
-        let mut re = Self::new();
+        let mut re = Self::new(Ops::from_str(&s[0])?);
 
-        if s.len() < 2 {
-            println!("wrong");
-            return Err(Error::new(ErrorKind::Other, "command parse wrong"));
-        }
-
-        re.op = Ops::from_str(&s[0]);
-        re.child_name = Some(s[1].clone());
-
-        if s.len() > 2 {
-            re.prep = Some(Prepositions::from_str(&s[2]));
-            if s.len() == 4 {
-                re.obj = Some(s[3].clone());
+        if s.len() > 1 {
+            if let Ok(pre) = Prepositions::from_str(&s[1]) {
+                re.prep = Some(pre);
+                if s.len() > 2 {
+                    re.obj = Some(s[2].clone());
+                }
+            } else {
+                re.child_name = Some(s[1].clone());
+                if s.len() > 3 {
+                    re.prep = Some(Prepositions::from_str(&s[2])?);
+                    re.obj = Some(s[3].clone());
+                }
             }
         }
 
@@ -104,20 +105,20 @@ impl Command {
     }
 
     pub fn new_from_str(s: Vec<&str>) -> Result<Self> {
-        let mut re = Self::new();
+        let mut re = Self::new(Ops::from_str(s[0])?);
 
-        if s.len() < 2 {
-            println!("Looks like command's not long enough");
-            return Err(Error::new(ErrorKind::Other, "command parse wrong"));
-        }
-
-        re.op = Ops::from_str(&s[0]);
-        re.child_name = Some(s[1].to_string());
-
-        if s.len() == 4 {
-            re.prep = Some(Prepositions::from_str(&s[2]));
-            if s.len() == 4 {
-                re.obj = Some(s[3].to_string());
+        if s.len() > 1 {
+            if let Ok(pre) = Prepositions::from_str(&s[1]) {
+                re.prep = Some(pre);
+                if s.len() > 2 {
+                    re.obj = Some(s[2].to_string());
+                }
+            } else {
+                re.child_name = Some(s[1].to_string());
+                if s.len() > 3 {
+                    re.prep = Some(Prepositions::from_str(&s[2])?);
+                    re.obj = Some(s[3].to_string());
+                }
             }
         }
 

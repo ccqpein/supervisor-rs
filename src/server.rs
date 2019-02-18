@@ -241,6 +241,7 @@ fn handle_client(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<
     buf_vec.retain(|&x| x != 0);
 
     let received_comm = String::from_utf8(buf_vec).unwrap();
+
     match day_care(kg, received_comm) {
         Ok(resp) => stream.write_all(format!("server response: \n{}", resp).as_bytes()),
         Err(e) => {
@@ -389,9 +390,6 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             ))
         }
 
-        //:= TODO: need done check feature
         client::Ops::Check => kg.check_status(),
-
-        _ => Ok("".to_string()),
     }
 }
