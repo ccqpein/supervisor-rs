@@ -1,10 +1,10 @@
 use super::client;
 use super::kindergarten::*;
-use super::Config;
+use super::{Config, OutputMode};
 
 use std::error::Error;
 use std::fs;
-use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::{Error as ioError, ErrorKind, Read, Result, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
@@ -127,7 +127,15 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     //setting stdout and stderr file path
     match &config.stdout {
         Some(out) => {
-            command.stdout(File::create(out.path.clone())?);
+            match out.mode {
+                OutputMode::Create => command.stdout(File::create(out.path.clone())?),
+                OutputMode::Append => command.stdout(
+                    OpenOptions::new()
+                        .append(true)
+                        .create(true)
+                        .open(out.path.clone())?,
+                ),
+            };
             ()
         }
         None => (),
@@ -135,7 +143,15 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 
     match &config.stderr {
         Some(err) => {
-            command.stderr(File::create(err.path.clone())?);
+            match err.mode {
+                OutputMode::Create => command.stderr(File::create(err.path.clone())?),
+                OutputMode::Append => command.stderr(
+                    OpenOptions::new()
+                        .append(true)
+                        .create(true)
+                        .open(err.path.clone())?,
+                ),
+            };
             ()
         }
         None => (),
