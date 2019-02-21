@@ -111,7 +111,6 @@ impl ServerConfig {
 
 //start a child processing, and give child_handle
 //side effection: config.child_id be updated
-//:= TODO: stdout and stderr should have ability to append file
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
