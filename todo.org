@@ -1,10 +1,12 @@
 * \TODO LIST 
 
 - [X] impl mutil load path
-- [ ] stdout and stderr should have ability to append file
+- [X] stdout and stderr should have ability to append file
 - [ ] need recover poisoned mutex
 - [X] need done check feature
 - [X] impl kill all feature (stop all + kill itself)
 - [X] impl try start feature (high priority)
 - [X] check/kill these commands maybe do not need `name` (need nice parser) (high priority)
-- [ ] check can just check one child
+- [X] check can just check one child
+- [X] quite (-q) mode
+- [ ] parse host

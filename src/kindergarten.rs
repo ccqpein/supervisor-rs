@@ -128,6 +128,7 @@ impl Kindergarten {
 
             match child_handle.try_wait()? {
                 Some(_) => {
+                    let _ = child_handle.wait();
                     cache.push(name.clone());
                 }
                 None => (),
@@ -155,19 +156,29 @@ impl Kindergarten {
         self.name_list.get(name)
     }
 
-    pub fn check_status(&mut self) -> Result<String> {
+    pub fn check_status(&mut self, name: &String) -> Result<String> {
         //first check_around
         self.check_around()?;
 
         let mut res = String::new();
-
-        for (name, id) in self.name_list.iter() {
-            res.push_str(&format!(
-                "child: {}\n  processing id: {}\n  config: {:?}\n",
-                name,
-                id,
-                self.id_list.get(id).unwrap().1
-            ));
+        if name == "" {
+            for (name, id) in self.name_list.iter() {
+                res.push_str(&format!(
+                    "child: {}\n  processing id: {}\n  config: {:?}\n",
+                    name,
+                    id,
+                    self.id_list.get(id).unwrap().1
+                ));
+            }
+        } else {
+            if let Some(id) = self.name_list.get(name) {
+                res.push_str(&format!(
+                    "child: {}\n  processing id: {}\n  config: {:?}\n",
+                    name,
+                    id,
+                    self.id_list.get(id).unwrap().1
+                ))
+            }
         }
 
         Ok(res)

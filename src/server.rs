@@ -178,7 +178,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 //1. a way receive command from client //move to start_deamon
 //2. first start will start all children in config path
 //3. then keep listening commands and can restart each of them //move to start deamon
-pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
+pub fn start_new_server(config_path: &str, arg: &str) -> Result<Kindergarten> {
     //Read server's config file
     let server_conf = if config_path == "" {
         ServerConfig::load("/tmp/server.yml")?
@@ -192,17 +192,20 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //store server config location
     kindergarten.server_config_path = config_path.to_string();
 
-    //run all config already in load path
-    for conf in server_conf.all_ymls_in_load_path()? {
-        let mut child_config = Config::read_from_yaml_file(&conf.1)?;
+    //if arg == -q, don't run initial
+    if arg != "-q" {
+        //run all config already in load path
+        for conf in server_conf.all_ymls_in_load_path()? {
+            let mut child_config = Config::read_from_yaml_file(&conf.1)?;
 
-        let child_handle = start_new_child(&mut child_config)?;
+            let child_handle = start_new_child(&mut child_config)?;
 
-        //registe id
-        let id = child_config.child_id.unwrap();
-        kindergarten.register_id(id, child_handle, child_config);
-        //regist name
-        kindergarten.register_name(&conf.0, id);
+            //registe id
+            let id = child_config.child_id.unwrap();
+            kindergarten.register_id(id, child_handle, child_config);
+            //regist name
+            kindergarten.register_name(&conf.0, id);
+        }
     }
 
     Ok(kindergarten)
@@ -405,6 +408,6 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             ))
         }
 
-        client::Ops::Check => kg.check_status(),
+        client::Ops::Check => kg.check_status(command.child_name.as_ref().unwrap()),
     }
 }

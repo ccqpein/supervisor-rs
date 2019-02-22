@@ -57,6 +57,14 @@ After server application start, all **application yaml files under loadpath of s
 
 Each sub-processing is named with **filename** of yaml file. 
 
+**command demo:**
+
+run server with special config file:
+`supervisor-rs-server ./test/server.yml` 
+
+run server with special config file, but does not run children initial:
+`supervisor-rs-server -q ./test/server.yml` 
+
 
 **Client Side**
 
