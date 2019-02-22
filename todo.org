@@ -10,3 +10,4 @@
 - [X] check can just check one child
 - [X] quite (-q) mode
 - [ ] parse host
+- [ ] move quite mode to server config
