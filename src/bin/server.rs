@@ -8,17 +8,15 @@ fn main() -> Result<()> {
     let arguments = env::args();
     let change_2_vec = arguments.collect::<Vec<String>>();
 
-    if change_2_vec.len() > 3 {
+    if change_2_vec.len() > 2 {
         println!("{}", "too much arguments, not support yet.");
         return Ok(());
     }
 
-    let k = if change_2_vec.len() == 3 {
-        server::start_new_server(&change_2_vec[2], &change_2_vec[1])?
-    } else if change_2_vec.len() == 2 {
-        server::start_new_server(&change_2_vec[1], "")?
+    let k = if change_2_vec.len() != 1 {
+        server::start_new_server(&change_2_vec[1])?
     } else {
-        server::start_new_server("", "")?
+        server::start_new_server("")?
     };
 
     //make channel for deamon & main communication

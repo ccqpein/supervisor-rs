@@ -1,2 +1,4 @@
 loadpaths:
   - ./test/client
+
+#mode: "aa"

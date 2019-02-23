@@ -18,6 +18,7 @@ use std::sync::{Arc, Mutex};
 struct ServerConfig {
     //path for all children's configs
     load_paths: Vec<String>,
+    mode: String,
 }
 
 impl ServerConfig {
@@ -31,7 +32,12 @@ impl ServerConfig {
 
     fn read_from_str(input: &str) -> Result<Self> {
         let temp = YamlLoader::load_from_str(input);
-        let mut result: Self = ServerConfig { load_paths: vec![] };
+        let mut result: Self = ServerConfig {
+            load_paths: vec![],
+
+            //quiet mode is default value now
+            mode: "quiet".to_string(),
+        };
 
         match temp {
             Ok(docs) => {
@@ -43,8 +49,14 @@ impl ServerConfig {
                         .collect::<Vec<String>>(),
                     None => return Ok(result),
                 };
-
-                result = ServerConfig { load_paths: paths }
+                let mode = match doc["mode"].as_str() {
+                    Some(v) => v.to_string(),
+                    None => return Ok(result),
+                };
+                result = ServerConfig {
+                    load_paths: paths,
+                    mode: mode,
+                }
             }
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
@@ -178,7 +190,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
 //1. a way receive command from client //move to start_deamon
 //2. first start will start all children in config path
 //3. then keep listening commands and can restart each of them //move to start deamon
-pub fn start_new_server(config_path: &str, arg: &str) -> Result<Kindergarten> {
+pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //Read server's config file
     let server_conf = if config_path == "" {
         ServerConfig::load("/tmp/server.yml")?
@@ -192,8 +204,8 @@ pub fn start_new_server(config_path: &str, arg: &str) -> Result<Kindergarten> {
     //store server config location
     kindergarten.server_config_path = config_path.to_string();
 
-    //if arg == -q, don't run initial
-    if arg != "-q" {
+    //if mode == quiet, don't run initial
+    if server_conf.mode != "quiet" {
         //run all config already in load path
         for conf in server_conf.all_ymls_in_load_path()? {
             let mut child_config = Config::read_from_yaml_file(&conf.1)?;
