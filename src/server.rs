@@ -49,14 +49,13 @@ impl ServerConfig {
                         .collect::<Vec<String>>(),
                     None => return Ok(result),
                 };
+                result.load_paths = paths;
+
                 let mode = match doc["mode"].as_str() {
                     Some(v) => v.to_string(),
                     None => return Ok(result),
                 };
-                result = ServerConfig {
-                    load_paths: paths,
-                    mode: mode,
-                }
+                result.mode = mode;
             }
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
