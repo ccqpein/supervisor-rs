@@ -101,9 +101,16 @@ impl Kindergarten {
             ));
         }
 
-        self.delete_by_name(name)?;
-
-        Ok(())
+        match child_handle.wait() {
+            Ok(_) => {
+                self.delete_by_name(name)?;
+                Ok(())
+            }
+            Err(e) => Err(ioError::new(
+                ErrorKind::InvalidData,
+                format!("Cannot kill child {}, id is {}, err is {}", name, id, e),
+            )),
+        }
     }
 
     //stop all children

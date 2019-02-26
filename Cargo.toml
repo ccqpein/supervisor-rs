@@ -1,6 +1,6 @@
 [package]
 name = "supervisor-rs"
-version = "0.3.3"
+version = "0.3.4"
 authors = ["ccQpein"]
 edition = "2018"
 
