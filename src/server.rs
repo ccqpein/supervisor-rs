@@ -284,7 +284,6 @@ fn handle_client(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<
 //if not fine, try to restart them
 //need channel input to update kindergarten
 fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
-    //:= TODO: need recover poisoned mutex
     let mut kg = kig.lock().unwrap();
 
     //run check around here, clean all stopped children

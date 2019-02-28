@@ -3,3 +3,4 @@
 - [ ] parse host
 - [ ] need recover poisoned mutex
 - [ ] help command
+- [ ] std::fmt::Display

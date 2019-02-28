@@ -85,6 +85,7 @@ commands:
 | stop     | stop running child. Have to supply child name. If want to stop all children, use `stop all`                                                                                                                                                                                                |
 | check    | return summary of all children who are **running**. If children are not running, no matter what reason, they will be cleaned from kindergarden's table.                                                                                                                                    |
 | trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
+| kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
 
 
 **Cross compiling**
