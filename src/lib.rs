@@ -3,6 +3,7 @@ pub mod kindergarten;
 pub mod server;
 
 use std::error::Error;
+use std::fmt;
 use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
 use yaml_rust::{Yaml, YamlLoader};
@@ -167,6 +168,16 @@ impl Clone for Config {
     }
 }
 
+impl fmt::Display for Config {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "  command is: {}\n  stdout is: {:?}\n  stderr is: {:?}\n  child id is:{:?}",
+            self.comm, self.stdout, self.stderr, self.child_id
+        )
+    }
+}
+
 // tiny tests below
 #[cfg(test)]
 mod tests {
@@ -177,6 +188,8 @@ mod tests {
     fn command_argvs() {
         let con = dbg!(Config::read_from_yaml_file("./test/argv.yml")).unwrap();
         let (comm, argvs) = con.split_args();
+        println!("command: {}", comm);
+
         println!("{:?}", con.split_args());
 
         println!("{:?}", argvs.unwrap().split(' ').collect::<Vec<&str>>());
@@ -184,8 +197,8 @@ mod tests {
 
     #[test]
     fn run_ls() {
-        //let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml")).unwrap();
+        let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml")).unwrap();
 
-        //let _ = dbg!(start_new_child(&mut con));
+        let _ = dbg!(start_new_child(&mut con));
     }
 }

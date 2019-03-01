@@ -171,7 +171,13 @@ impl Kindergarten {
         if name == "" {
             for (name, id) in self.name_list.iter() {
                 res.push_str(&format!(
-                    "child: {}\n  processing id: {}\n  config: {:?}\n",
+                    "=======================
+child name: {}
+processing id: {}
+config detail:
+{}
+=======================\n
+",
                     name,
                     id,
                     self.id_list.get(id).unwrap().1
@@ -180,7 +186,13 @@ impl Kindergarten {
         } else {
             if let Some(id) = self.name_list.get(name) {
                 res.push_str(&format!(
-                    "child: {}\n  processing id: {}\n  config: {:?}\n",
+                    "=======================
+child name: {}
+processing id: {}
+config detail:
+{}
+=======================\n
+",
                     name,
                     id,
                     self.id_list.get(id).unwrap().1

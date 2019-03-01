@@ -65,7 +65,7 @@ fn main() -> Result<()> {
 
     let mut response = String::new();
     stream.read_to_string(&mut response)?;
-    println!("{}", response);
+    print!("{}", response);
 
     Ok(())
 }
