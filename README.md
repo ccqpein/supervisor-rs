@@ -51,9 +51,11 @@ output:
 
 ## Usage ##
 
+You can download compiled binary file directly on release tag.
+
 **Server Side**
 
-Start server side application. After compiled, run `server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config given, supervisor will going to find `server.yml` in `/tmp`.
+Start server side application. After compiled, run `supervisor-rs-server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config path given, supervisor will going to find `server.yml` in `/tmp`.
 
 After server application start, if `mode` is not **quiet**, then all **application yaml files under loadpath of server config** will be ran by application. So, that's means every yaml files in there should be legal application config file, or server cannot start.
 
@@ -70,9 +72,9 @@ run server with special config file:
 
 *Restart child processing*:
 
-`client restart child0 on localhost` will restart processing `child0` on localhost;
+`supervisor-rs-client restart child0 on localhost` will restart processing `child0` on localhost;
 
-`client restart child0 on 198.0.0.2` will restart processing `child0` on 192.0.0.2, I assume you running server side application on this host;
+`supervisor-rs-client restart child0 on 198.0.0.2` will restart processing `child0` on `192.0.0.2`, I assume you running server side application on this host;
 
 child name is not must for `check`/`kill` commands.
 
