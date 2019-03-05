@@ -1,6 +1,6 @@
 # README #
 
-`supervisor-rs` used to be a manager of handle application running. `supervisor-rs` can start/restart/stop(still developing) processing.
+`supervisor-rs` used to be a manager of handle application running. `supervisor-rs` can start/restart/stop processing.
 
 **features**:
 
