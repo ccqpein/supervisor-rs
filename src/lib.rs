@@ -94,6 +94,8 @@ pub struct Config {
     stdout: Option<Output>,
     stderr: Option<Output>,
     child_id: Option<u32>,
+    //:= TODO: need write parser of time
+    repeat: Option<u32>,
 }
 
 impl Config {
@@ -103,6 +105,7 @@ impl Config {
             stdout: None,
             stderr: None,
             child_id: None,
+            repeat: None,
         }
     }
 
@@ -164,6 +167,7 @@ impl Clone for Config {
             stdout: self.stdout.clone(),
             stderr: self.stderr.clone(),
             child_id: self.child_id,
+            repeat: self.repeat,
         }
     }
 }
