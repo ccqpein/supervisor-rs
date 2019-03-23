@@ -314,6 +314,14 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
         // hot start a new child after its config yaml file put in loadpath
         client::Ops::Start => {
+            //:= TODO: need start all function
+            if command.child_name.as_ref().unwrap() == "all" {
+                return Err(ioError::new(
+                    ErrorKind::Other,
+                    format!("\"all\" is reserved keywords"),
+                ));
+            }
+
             if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
                 return Err(ioError::new(
                     ErrorKind::Other,

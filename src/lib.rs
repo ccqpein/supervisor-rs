@@ -1,6 +1,7 @@
 pub mod client;
 pub mod kindergarten;
 pub mod server;
+pub mod timer;
 
 use std::error::Error;
 use std::fmt;
@@ -94,8 +95,7 @@ pub struct Config {
     stdout: Option<Output>,
     stderr: Option<Output>,
     child_id: Option<u32>,
-    //:= TODO: need write parser of time
-    repeat: Option<u32>,
+    repeat: Option<i64>,
 }
 
 impl Config {
@@ -122,12 +122,16 @@ impl Config {
                 if let Ok(output) = Output::new(doc["output"].clone()) {
                     for (field, data) in output {
                         if field == "stdout".to_string() {
-                            result.stdout = Some(data)
+                            result.stdout = Some(data);
                         } else if field == "stderr".to_string() {
-                            result.stderr = Some(data)
+                            result.stderr = Some(data);
                         }
                     }
                 }
+
+                if let Some(repeat_conf) = doc["repeat"].as_hash() {
+                    result.repeat = repeat_conf[&Yaml::String("seconds".to_string())].as_i64();
+                };
             }
 
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),

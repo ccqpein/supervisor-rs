@@ -34,7 +34,7 @@ impl Kindergarten {
     }
 
     //update
-    pub fn update(&mut self, id: u32, name: &String, child: Child, config: Config) {
+    fn update(&mut self, id: u32, name: &String, child: Child, config: Config) {
         self.register_id(id, child, config);
         self.register_name(name, id);
     }

@@ -6,4 +6,4 @@ output:
 #  - stderr: nnnnn
 #    mode: append
 repeat:
-  time: 2s
+  seconds: 2
