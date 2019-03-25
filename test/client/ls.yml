@@ -1,1 +1,4 @@
 command: ls -al
+
+repeat:
+  seconds: 2

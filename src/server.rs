@@ -1,5 +1,6 @@
 use super::client;
 use super::kindergarten::*;
+use super::timer::*;
 use super::{Config, OutputMode};
 
 use std::error::Error;
@@ -12,6 +13,7 @@ use std::sync::mpsc::Sender;
 use std::thread;
 use yaml_rust::YamlLoader;
 
+use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
@@ -207,6 +209,13 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     if server_conf.mode != "quiet" {
         //run all config already in load path
         for conf in server_conf.all_ymls_in_load_path()? {
+            if &conf.0 == "all" {
+                return Err(ioError::new(
+                    ErrorKind::InvalidInput,
+                    format!("\"all\" is reserved keywords, cannot run child named \"all\""),
+                ));
+            }
+
             let mut child_config = Config::read_from_yaml_file(&conf.1)?;
 
             let child_handle = start_new_child(&mut child_config)?;
@@ -224,9 +233,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
 //start a listener for client commands
 //keep taking care children
-pub fn start_deamon(kg: Kindergarten, sd: Sender<(String, String)>) -> Result<()> {
-    let safe_kg = Arc::new(Mutex::new(kg));
-
+pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, String)>) -> Result<()> {
     //start TCP listener to receive client commands
     let listener = TcpListener::bind(format!("{}:{}", "0.0.0.0", 33889))?;
 
@@ -262,7 +269,7 @@ pub fn start_deamon(kg: Kindergarten, sd: Sender<(String, String)>) -> Result<()
 }
 
 //get client TCP stream and send to channel
-fn handle_client(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<()> {
+fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<()> {
     let mut buf = [0; 100];
     stream.read(&mut buf)?;
 
@@ -271,7 +278,7 @@ fn handle_client(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<
 
     let received_comm = String::from_utf8(buf_vec).unwrap();
 
-    match day_care(kg, received_comm) {
+    match day_care(kig, received_comm) {
         Ok(resp) => stream.write_all(format!("server response: \n{}", resp).as_bytes()),
         Err(e) => {
             stream.write_all(format!("server response error: \n{}", e.description()).as_bytes())?;
@@ -283,7 +290,7 @@ fn handle_client(mut stream: TcpStream, kg: Arc<Mutex<Kindergarten>>) -> Result<
 //check all children are fine or not
 //if not fine, try to restart them
 //need channel input to update kindergarten
-fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
+pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
     let mut kg = kig.lock().unwrap();
 
     //run check around here, clean all stopped children
@@ -314,7 +321,7 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
         // hot start a new child after its config yaml file put in loadpath
         client::Ops::Start => {
-            //:= TODO: need start all function
+            //if file named \all", stop all behavior not consistent
             if command.child_name.as_ref().unwrap() == "all" {
                 return Err(ioError::new(
                     ErrorKind::Other,
@@ -338,15 +345,35 @@ fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ServerConfig::load(&kg.server_config_path)?
             };
 
-            let mut conf = server_conf.find_config_by_name(command.child_name.as_ref().unwrap())?;
+            let name = command.child_name.as_ref().unwrap();
+            let mut conf = server_conf.find_config_by_name(name)?;
+
             match start_new_child(&mut conf) {
                 Ok(child_handle) => {
                     let id = conf.child_id.unwrap();
-                    kg.register_id(id, child_handle, conf);
-                    kg.register_name(command.child_name.as_ref().unwrap(), id);
+                    kg.register_id(id, child_handle, conf.clone());
+                    kg.register_name(name, id);
+
+                    //repeat here
+                    let repeat_meg = if conf.is_repeat() {
+                        //clone locked val to timer
+                        let timer_lock_val = Arc::clone(&kig);
+                        timer::new(
+                            //:= TODO: need solve this unwrap here
+                            command.child_name.as_ref().unwrap(),
+                            id,
+                            conf.to_duration().unwrap(),
+                        )
+                        .run(timer_lock_val, format!("{} {}", "restart", name));
+                        format!(", and it will restart in {:?}", conf.to_duration().unwrap())
+                    } else {
+                        String::new()
+                    };
+
                     Ok(format!(
-                        "start {} success",
-                        command.child_name.as_ref().unwrap()
+                        "start {} success{}",
+                        command.child_name.as_ref().unwrap(),
+                        repeat_meg
                     ))
                 }
                 Err(e) => Err(e),

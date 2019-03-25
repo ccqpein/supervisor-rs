@@ -13,6 +13,7 @@ pub struct Kindergarten {
     id_list: HashMap<u32, (Child, Config)>,
 
     //child_name -> child_id
+    //cannot accept duplicated name
     name_list: HashMap<String, u32>,
 }
 
@@ -128,6 +129,18 @@ impl Kindergarten {
     //check if some command have done already, clean them
     //only return error if child_handle try_wait has problem
     pub fn check_around(&mut self) -> Result<()> {
+        //this guard check for name_list and id_list aren't has same number
+        //it shall not happen
+        if self.name_list.len() != self.id_list.len() {
+            return Err(ioError::new(
+                ErrorKind::InvalidData,
+                format!(
+                    "mumber of name_list not match id_list, something wrong: \n{:#?}\n{:#?}",
+                    self.name_list, self.id_list
+                ),
+            ));
+        }
+
         let mut cache: Vec<String> = vec![];
         for (name, id) in self.name_list.iter() {
             let store_val = self.id_list.get_mut(id).unwrap();

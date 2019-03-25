@@ -1,14 +1,32 @@
 use super::kindergarten::*;
-use std::io::{Error as ioError, ErrorKind, Read, Result, Write};
+use super::server;
+use super::*;
+use std::io::Error as ioError;
 use std::{thread, time};
 
-pub fn timer_fn<F>(interval: u64, func: F) -> Result<String>
-where
-    F: Fn() -> Result<String>,
-{
-    let sleep_time_seconds = time::Duration::from_secs(interval);
-    thread::sleep(sleep_time_seconds);
-    func()
+use std::sync::{Arc, Mutex};
+
+pub struct timer {
+    name: String,
+    id: u32,
+    interval: time::Duration,
 }
 
-//timer_fn(5,day_care(kg))
+impl timer {
+    pub fn new(name: &String, id: u32, td: time::Duration) -> Self {
+        timer {
+            name: name.clone(),
+            id: id,
+            interval: td,
+        }
+    }
+
+    pub fn run(self, kig: Arc<Mutex<Kindergarten>>, comm: String) {
+        thread::sleep(self.interval);
+        if let Err(e) = server::day_care(kig, comm.clone()) {
+            println!("timer is up, but {:?}", e);
+        } else {
+            println!("timer is up, {}", comm);
+        }
+    }
+}

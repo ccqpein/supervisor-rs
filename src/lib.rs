@@ -7,6 +7,7 @@ use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
+use std::time;
 use yaml_rust::{Yaml, YamlLoader};
 
 #[derive(Debug, Copy, Clone)]
@@ -95,11 +96,11 @@ pub struct Config {
     stdout: Option<Output>,
     stderr: Option<Output>,
     child_id: Option<u32>,
-    repeat: Option<i64>,
+    repeat: Option<u64>,
 }
 
 impl Config {
-    pub fn new(comm: String) -> Self {
+    fn new(comm: String) -> Self {
         Config {
             comm: comm,
             stdout: None,
@@ -109,7 +110,7 @@ impl Config {
         }
     }
 
-    pub fn read_from_str(input: &str) -> Result<Self> {
+    fn read_from_str(input: &str) -> Result<Self> {
         let temp = YamlLoader::load_from_str(input);
 
         let mut result: Self;
@@ -130,7 +131,13 @@ impl Config {
                 }
 
                 if let Some(repeat_conf) = doc["repeat"].as_hash() {
-                    result.repeat = repeat_conf[&Yaml::String("seconds".to_string())].as_i64();
+                    result.repeat = if let Some(i) =
+                        repeat_conf[&Yaml::String("seconds".to_string())].as_i64()
+                    {
+                        Some(i as u64)
+                    } else {
+                        None
+                    }
                 };
             }
 
@@ -140,7 +147,7 @@ impl Config {
         Ok(result)
     }
 
-    pub fn read_from_yaml_file(filename: &str) -> Result<Self> {
+    fn read_from_yaml_file(filename: &str) -> Result<Self> {
         let contents = File::open(filename);
         let mut string_result = String::new();
         match contents {
@@ -161,6 +168,30 @@ impl Config {
         }
 
         (split_comm[0].to_string(), None)
+    }
+
+    fn is_repeat(&self) -> bool {
+        if let Some(_) = self.repeat {
+            return true;
+        }
+        false
+    }
+
+    fn to_duration(&self) -> Result<time::Duration> {
+        if !self.is_repeat() {
+            return Err(ioError::new(
+                ErrorKind::Other,
+                format!("cannot create repeat command"),
+            ));
+        }
+
+        match self.repeat {
+            Some(0) | None => Err(ioError::new(
+                ErrorKind::Other,
+                format!("cannot create repeat command"),
+            )),
+            Some(i) => Ok(time::Duration::from_secs(i)),
+        }
     }
 }
 

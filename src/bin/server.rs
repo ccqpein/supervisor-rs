@@ -1,6 +1,7 @@
 use std::env;
 use std::io::Result;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use supervisor_rs::server;
 
@@ -22,8 +23,11 @@ fn main() -> Result<()> {
     //make channel for deamon & main communication
     let (tx, rx) = mpsc::channel();
 
+    //give thread safe kindergarden here
+    let kg = Arc::new(Mutex::new(k));
+
     //use an additional thread to handle deamon, and send message out.
-    let _ = thread::spawn(move || server::start_deamon(k, tx));
+    let _ = thread::spawn(|| server::start_deamon(kg, tx));
 
     //handle message
     for (f, _) in rx {
