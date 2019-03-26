@@ -6,6 +6,7 @@ use std::{thread, time};
 
 use std::sync::{Arc, Mutex};
 
+//:= TODO: need check in case kg and timer not sync, maybe
 pub struct timer {
     name: String,
     id: u32,
@@ -13,7 +14,7 @@ pub struct timer {
 }
 
 impl timer {
-    pub fn new(name: &String, id: u32, td: time::Duration) -> Self {
+    pub fn new(name: String, id: u32, td: time::Duration) -> Self {
         timer {
             name: name.clone(),
             id: id,

@@ -4,4 +4,4 @@
 - [X] need recover poisoned mutex
 - [ ] help command
 - [X] std::fmt::Display
-- [ ] timing restart child
+- [X] timing restart child

@@ -11,9 +11,9 @@ use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
 use std::sync::mpsc::Sender;
 use std::thread;
+use std::time;
 use yaml_rust::YamlLoader;
 
-use std::ops::DerefMut;
 use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
@@ -346,35 +346,22 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             };
 
             let name = command.child_name.as_ref().unwrap();
-            let mut conf = server_conf.find_config_by_name(name)?;
+            let mut conf = server_conf.find_config_by_name(&name)?;
 
             match start_new_child(&mut conf) {
                 Ok(child_handle) => {
                     let id = conf.child_id.unwrap();
                     kg.register_id(id, child_handle, conf.clone());
-                    kg.register_name(name, id);
+                    kg.register_name(&name, id);
 
                     //repeat here
                     let repeat_meg = if conf.is_repeat() {
-                        //clone locked val to timer
-                        let timer_lock_val = Arc::clone(&kig);
-                        timer::new(
-                            //:= TODO: need solve this unwrap here
-                            command.child_name.as_ref().unwrap(),
-                            id,
-                            conf.to_duration().unwrap(),
-                        )
-                        .run(timer_lock_val, format!("{} {}", "restart", name));
-                        format!(", and it will restart in {:?}", conf.to_duration().unwrap())
+                        repeat(conf, Arc::clone(&kig), name.clone())
                     } else {
                         String::new()
                     };
 
-                    Ok(format!(
-                        "start {} success{}",
-                        command.child_name.as_ref().unwrap(),
-                        repeat_meg
-                    ))
+                    Ok(format!("start {} success{}", name.clone(), repeat_meg))
                 }
                 Err(e) => Err(e),
             }
@@ -422,15 +409,26 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ServerConfig::load(&kg.server_config_path)?
             };
 
+            let name = command.child_name.as_ref().unwrap();
             let mut conf = server_conf.find_config_by_name(command.child_name.as_ref().unwrap())?;
+
             match start_new_child(&mut conf) {
                 Ok(child_handle) => {
                     let id = conf.child_id.unwrap();
-                    kg.register_id(id, child_handle, conf);
+                    kg.register_id(id, child_handle, conf.clone());
                     kg.register_name(command.child_name.as_ref().unwrap(), id);
+
+                    //repeat here
+                    let repeat_meg = if conf.is_repeat() {
+                        repeat(conf, Arc::clone(&kig), name.clone())
+                    } else {
+                        String::new()
+                    };
+
                     resp.push_str(&format!(
-                        "start {} success",
-                        command.child_name.as_ref().unwrap()
+                        "start {} success{}",
+                        command.child_name.as_ref().unwrap(),
+                        repeat_meg,
                     ));
                     Ok(resp)
                 }
@@ -455,4 +453,18 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
         client::Ops::Check => kg.check_status(command.child_name.as_ref().unwrap()),
     }
+}
+
+//:= TODO: this function maybe need refactory, just use KG maybe
+fn repeat(conf: Config, kig: Arc<Mutex<Kindergarten>>, name: String) -> String {
+    //clone locked val to timer
+    let timer_lock_val = Arc::clone(&kig);
+    let duration = conf.to_duration().unwrap().clone();
+    let id = conf.child_id.unwrap().clone();
+
+    thread::spawn(move || {
+        timer::new(name.clone(), id, duration)
+            .run(timer_lock_val, format!("{} {}", "trystart", name)) //:= TODO: need command parser
+    });
+    format!(", and it will restart in {:?}", conf.to_duration().unwrap())
 }

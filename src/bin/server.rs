@@ -27,7 +27,7 @@ fn main() -> Result<()> {
     let kg = Arc::new(Mutex::new(k));
 
     //use an additional thread to handle deamon, and send message out.
-    let _ = thread::spawn(|| server::start_deamon(kg, tx));
+    let _ = thread::spawn(move || server::start_deamon(kg, tx));
 
     //handle message
     for (f, _) in rx {

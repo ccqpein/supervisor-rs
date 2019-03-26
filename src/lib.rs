@@ -181,7 +181,7 @@ impl Config {
         if !self.is_repeat() {
             return Err(ioError::new(
                 ErrorKind::Other,
-                format!("cannot create repeat command"),
+                format!("do not find repeat value"),
             ));
         }
 
