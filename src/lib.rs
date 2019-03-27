@@ -90,13 +90,53 @@ impl Output {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Repeat {
+    action: String,
+    seconds: u64,
+}
+
+//:= TODO: need write repeat logic in doc
+impl Repeat {
+    fn new(input: &Yaml) -> Result<Self> {
+        let mut result = Repeat {
+            action: String::from("restart"),
+            seconds: 0,
+        };
+
+        let repeat = match input.as_hash() {
+            Some(v) => v,
+            None => {
+                return Err(ioError::new(
+                    ErrorKind::InvalidData,
+                    format!("output format wrong"),
+                ));
+            }
+        };
+
+        if let Some(v) = repeat.get(&Yaml::from_str("action")) {
+            if let Some(a) = v.clone().into_string() {
+                result.action = a;
+            }
+        }
+
+        if let Some(v) = repeat.get(&Yaml::from_str("seconds")) {
+            if let Some(a) = v.clone().into_i64() {
+                result.seconds = a as u64;
+            }
+        }
+
+        Ok(result)
+    }
+}
+
 #[derive(Debug)]
 pub struct Config {
     comm: String,
     stdout: Option<Output>,
     stderr: Option<Output>,
     child_id: Option<u32>,
-    repeat: Option<u64>,
+    repeat: Option<Repeat>,
 }
 
 impl Config {
@@ -130,15 +170,11 @@ impl Config {
                     }
                 }
 
-                if let Some(repeat_conf) = doc["repeat"].as_hash() {
-                    result.repeat = if let Some(i) =
-                        repeat_conf[&Yaml::String("seconds".to_string())].as_i64()
-                    {
-                        Some(i as u64)
-                    } else {
-                        None
-                    }
-                };
+                result.repeat = if let Ok(r) = Repeat::new(&doc["repeat"]) {
+                    Some(r)
+                } else {
+                    None
+                }
             }
 
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
@@ -185,12 +221,12 @@ impl Config {
             ));
         }
 
-        match self.repeat {
-            Some(0) | None => Err(ioError::new(
+        match self.repeat.as_ref().unwrap().seconds.clone() {
+            0 => Err(ioError::new(
                 ErrorKind::Other,
-                format!("cannot create repeat command"),
+                format!("repeat time cannot be 0"),
             )),
-            Some(i) => Ok(time::Duration::from_secs(i)),
+            d => Ok(time::Duration::from_secs(d)),
         }
     }
 }
@@ -202,7 +238,7 @@ impl Clone for Config {
             stdout: self.stdout.clone(),
             stderr: self.stderr.clone(),
             child_id: self.child_id,
-            repeat: self.repeat,
+            repeat: self.repeat.clone(),
         }
     }
 }

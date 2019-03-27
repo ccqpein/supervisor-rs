@@ -3,7 +3,9 @@ output:
   - stdout: aaaaaa
     mode: create
 
-#  - stderr: nnnnn
-#    mode: append
+  - stderr: nnnnn
+    mode: append
+    
 repeat:
+  action: trystart
   seconds: 2

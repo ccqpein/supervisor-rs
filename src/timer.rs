@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 pub struct timer {
     name: String,
     id: u32,
+    comm: String,
     interval: time::Duration,
 }
 
@@ -18,6 +19,7 @@ impl timer {
         timer {
             name: name.clone(),
             id: id,
+            comm: String::new(),
             interval: td,
         }
     }
