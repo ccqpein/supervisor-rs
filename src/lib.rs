@@ -120,6 +120,7 @@ impl Repeat {
             }
         }
 
+        //:= TODO: 0 should not be legal interval, need check
         if let Some(v) = repeat.get(&Yaml::from_str("seconds")) {
             if let Some(a) = v.clone().into_i64() {
                 result.seconds = a as u64;
@@ -228,6 +229,17 @@ impl Config {
             )),
             d => Ok(time::Duration::from_secs(d)),
         }
+    }
+
+    fn repeat_command(&self) -> Result<String> {
+        if !self.is_repeat() {
+            return Err(ioError::new(
+                ErrorKind::Other,
+                format!("do not find repeat value"),
+            ));
+        }
+
+        Ok(self.repeat.as_ref().unwrap().action.clone())
     }
 }
 

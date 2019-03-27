@@ -1,4 +1,5 @@
 command: ls -al
 
 repeat:
-  seconds: 2
+  action: start
+  seconds: 5

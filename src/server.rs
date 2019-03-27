@@ -11,7 +11,6 @@ use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
 use std::sync::mpsc::Sender;
 use std::thread;
-use std::time;
 use yaml_rust::YamlLoader;
 
 use std::sync::{Arc, Mutex};
@@ -455,16 +454,15 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
     }
 }
 
-//:= TODO: this function maybe need refactory, just use KG maybe
 fn repeat(conf: Config, kig: Arc<Mutex<Kindergarten>>, name: String) -> String {
     //clone locked val to timer
     let timer_lock_val = Arc::clone(&kig);
-    let duration = conf.to_duration().unwrap().clone();
-    let id = conf.child_id.unwrap().clone();
+    let next_time = conf.to_duration().unwrap();
 
     thread::spawn(move || {
-        timer::new(name.clone(), id, duration)
-            .run(timer_lock_val, format!("{} {}", "trystart", name)) //:= TODO: need command parser
+        Timer::new_from_conf(name.clone(), conf)
+            .unwrap()
+            .run(timer_lock_val) //:= TODO: need command parser
     });
-    format!(", and it will restart in {:?}", conf.to_duration().unwrap())
+    format!(", and it will restart in {:?}", next_time)
 }
