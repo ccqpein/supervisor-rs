@@ -259,8 +259,8 @@ impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "  command is: {}\n  stdout is: {:?}\n  stderr is: {:?}\n  child id is:{:?}",
-            self.comm, self.stdout, self.stderr, self.child_id
+            "  command is: {}\n  stdout is: {:?}\n  stderr is: {:?}\n  child id is:{:?}\n  repeat is: {:?}",
+            self.comm, self.stdout, self.stderr, self.child_id, self.repeat,            
         )
     }
 }
