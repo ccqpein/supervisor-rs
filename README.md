@@ -101,7 +101,7 @@ repeat:
   
 ```
 
-then, when you start it, `supervisor-rs` will give a timer stand by and send back command when time is up. For example, config behind will run `restart demo` every 5 seconds. 
+then, when you start it, `supervisor-rs` will give a timer stand by and send back command when time is up. For example, config above will run `restart demo` every 5 seconds. 
 
 `action`'s values are command we using in supervisor-rs-client, so you even can `stop` child with `repeat` field. But so, `supervisor-rs` won't create a timer stand by. 
 
@@ -110,7 +110,7 @@ Only `start`, `restart`, and `trystart` will let `supervisor-rs` create a timer,
 
 *How to stop repeat*
 
-As I said behind, `timer` be created right after child runs. So you cannot stop "next" action, but if you change child's config, like delete repeat field, then "next" action won't create a timer. 
+As I said above, `timer` be created right after child runs. So you cannot stop "next" action, but if you change child's config, like delete repeat field, then "next" action won't create a timer. 
 
 This is because all `start`, `restart` and `trystart` will **reload** config of child before it does its job.
 
