@@ -1,7 +1,6 @@
 * \TODO LIST 
 
 - [ ] parse host
-- [X] need recover poisoned mutex
 - [ ] help command
-- [X] std::fmt::Display
-- [X] timing restart child
+- [ ] time of when start child
+- [ ] timestamp in log of server
