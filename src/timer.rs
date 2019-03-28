@@ -43,16 +43,14 @@ impl Timer {
 
     pub fn run(self, kig: Arc<Mutex<Kindergarten>>) {
         thread::sleep(self.interval);
-        if let Err(e) =
-            server::day_care(kig, format!("{} {}", self.comm.clone(), self.name.clone()))
-        {
-            println!("Timer is up, but {:?}", e);
-        } else {
-            println!(
-                "Timer is up, run {} {}",
+        match server::day_care(kig, format!("{} {}", self.comm.clone(), self.name.clone())) {
+            Err(e) => println!("Timer is up, but {:?}", e.description()),
+            Ok(m) => println!(
+                "Timer is up, run \"{} {}\"\n{}",
                 self.comm.clone(),
-                self.name.clone()
-            );
+                self.name.clone(),
+                m,
+            ),
         }
     }
 

@@ -9,13 +9,6 @@
 + startup with particular server config
 + restart processing
 + stop processing
-+ redirect stdout and stderr to log file
-+ client should talk with server's side supervisor-rs
-+ server/client should talk to each other (maybe not too much)
-+ server should has check feature and can return check result to client
-
-Compress log file maybe not good ideas, change running processing's file handle is too much work for `supervisor-rs`. 
-
 
 **design**:
 
@@ -89,6 +82,37 @@ commands:
 | trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
 | kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
 
+**Repeat feature**
+
+if config of child has `repeat` field:
+
+```yaml
+#file name (child name) is demo.yml
+command: /tmp/test
+output:
+  - stdout: aaaaaa
+    mode: create
+
+  - stderr: nnnnn
+    mode: append
+repeat:
+  action: restart
+  seconds: 5 #only support seconds now
+  
+```
+
+then, when you start it, `supervisor-rs` will give a timer stand by and send back command when time is up. For example, config behind will run `restart demo` every 5 seconds. 
+
+`action`'s values are command we using in supervisor-rs-client, so you even can `stop` child with `repeat` field. But so, `supervisor-rs` won't create a timer stand by. 
+
+Only `start`, `restart`, and `trystart` will let `supervisor-rs` create a timer, if `repeat` field exists.
+
+
+*How to stop repeat*
+
+As I said behind, `timer` be created right after child runs. So you cannot stop "next" action, but if you change child's config, like delete repeat field, then "next" action won't create a timer. 
+
+This is because all `start`, `restart` and `trystart` will **reload** config of child before it does its job.
 
 **Cross compiling**
 

@@ -307,13 +307,24 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ServerConfig::load(&kg.server_config_path)?
             };
 
+            let name = command.child_name.as_ref().unwrap();
             let mut conf = server_conf.find_config_by_name(command.child_name.as_ref().unwrap())?;
 
             match kg.restart(command.child_name.as_ref().unwrap(), &mut conf) {
-                Ok(_) => Ok(format!(
-                    "restart {} success",
-                    command.child_name.as_ref().unwrap()
-                )),
+                Ok(_) => {
+                    //repeat here
+                    let repeat_meg = if conf.is_repeat() {
+                        repeat(conf, Arc::clone(&kig), name.clone())
+                    } else {
+                        String::new()
+                    };
+
+                    Ok(format!(
+                        "restart {} success{}",
+                        command.child_name.as_ref().unwrap(),
+                        repeat_meg,
+                    ))
+                }
                 Err(e) => Err(e),
             }
         }
@@ -454,11 +465,13 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
     }
 }
 
+//receive child config, KG, and filename of child config, repeat function
 fn repeat(conf: Config, kig: Arc<Mutex<Kindergarten>>, name: String) -> String {
     //clone locked val to timer
     let timer_lock_val = Arc::clone(&kig);
     let next_time = conf.to_duration().unwrap();
 
+    //give a timer
     thread::spawn(move || {
         Timer::new_from_conf(name.clone(), conf)
             .unwrap()
