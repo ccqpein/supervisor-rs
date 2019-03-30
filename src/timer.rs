@@ -8,6 +8,8 @@ use std::sync::{Arc, Mutex};
 
 //:= TODO: need to have ability to terminate timer, in case in infinity loop
 //:= TODO: need check in case kg and timer not sync, maybe
+struct TimerRecord {}
+
 pub struct Timer {
     name: String,
     id: u32,
