@@ -6,10 +6,6 @@ use std::{thread, time};
 
 use std::sync::{Arc, Mutex};
 
-//:= TODO: need to have ability to terminate timer, in case in infinity loop
-//:= TODO: need check in case kg and timer not sync, maybe
-struct TimerRecord {}
-
 pub struct Timer {
     name: String,
     id: u32,
@@ -45,6 +41,16 @@ impl Timer {
 
     pub fn run(self, kig: Arc<Mutex<Kindergarten>>) {
         thread::sleep(self.interval);
+        //check if this timer still works
+        if !self.check(kig.clone()) {
+            println!(
+                "check failed when timer try to run \"{} {}\"",
+                self.comm.clone(),
+                self.name.clone()
+            );
+            return;
+        }
+
         match server::day_care(kig, format!("{} {}", self.comm.clone(), self.name.clone())) {
             Err(e) => println!("Timer is up, but {:?}", e.description()),
             Ok(m) => println!(
@@ -56,6 +62,16 @@ impl Timer {
         }
     }
 
-    //:= TODO: this should use name and id store in timer to check if KG is
-    //fn check(){}
+    fn check(&self, kig: Arc<Mutex<Kindergarten>>) -> bool {
+        let mut kg = kig.lock().unwrap();
+        //if timer.id not equal child.id, means child has already restarted
+        //then this timer is outdate
+        if let Some(id) = kg.has_child(&self.name) {
+            if *id == self.id {
+                return true;
+            }
+        }
+
+        return false;
+    }
 }
