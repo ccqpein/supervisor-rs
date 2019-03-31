@@ -114,6 +114,8 @@ As I said above, `timer` be created right after child runs. So you cannot stop "
 
 This is because all `start`, `restart` and `trystart` will **reload** config of child before it does its job.
 
+So, what will supervisor do if child has `stopped`, or `restart` manually before timer finish its waiting and send command to supervisor again, timer isn't outdated? Timer will check if child has same processing id as when it created timer. If this check passed, timer will do its job as normal, else, timer won't do anything because child current is not child before.
+
 **Cross compiling**
 
 `brew tap filosottile/musl-cross && brew install FiloSottile/musl-cross/musl-cross`
