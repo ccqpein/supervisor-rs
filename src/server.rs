@@ -1,5 +1,6 @@
 use super::client;
 use super::kindergarten::*;
+use super::logger;
 use super::timer::*;
 use super::{Config, OutputMode};
 
@@ -116,7 +117,7 @@ impl ServerConfig {
 
         Err(ioError::new(
             ErrorKind::NotFound,
-            format!("Cannot found '{}' file in load path", filename),
+            logger::timelog(&format!("Cannot found '{}' file in load path", filename)),
         ))
     }
 }
@@ -179,7 +180,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
         _ => {
             return Err(ioError::new(
                 ErrorKind::Other,
-                format!("Cannot start command {:?}", command),
+                logger::timelog(&format!("Cannot start command {:?}", command)),
             ));
         }
     };
@@ -211,7 +212,9 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
             if &conf.0 == "all" {
                 return Err(ioError::new(
                     ErrorKind::InvalidInput,
-                    format!("\"all\" is reserved keywords, cannot run child named \"all\""),
+                    logger::timelog(&format!(
+                        "\"all\" is reserved keywords, cannot run child named \"all\""
+                    )),
                 ));
             }
 
@@ -243,24 +246,27 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
                 let sd_ = Sender::clone(&sd);
                 let _ = thread::spawn(move || {
                     //run handle_client and catch error if has
-                    if let Err(e) = handle_client(stream, this_kg) {
-                        //hard check if it is suicide operation, because I only care this message so far.
-                        //this operation isn't in handle_client because it has make sure return to client..
-                        //..first
-                        let (first, second) = e.description().split_at(12);
-                        if first == "I am dying. " {
-                            println!("{}", second.to_string());
-                            //tell main thread,
-                            sd_.send((first.to_string(), second.to_string())).unwrap();
-                        } else {
-                            //if just normal error
-                            println!("{}", e.description());
+                    match handle_client(stream, this_kg) {
+                        Err(e) => {
+                            //hard check if it is suicide operation, because I only care this message so far.
+                            //this operation isn't in handle_client because it has make sure return to client..
+                            //..first
+                            let (first, second) = e.description().split_at(12);
+                            if first == "I am dying. " {
+                                println!("{}", logger::timelog(second));
+                                //tell main thread,
+                                sd_.send((first.to_string(), second.to_string())).unwrap();
+                            } else {
+                                //if just normal error
+                                println!("{}", logger::timelog(e.description()));
+                            }
                         }
-                    };
+                        Ok(des) => println!("{}", logger::timelog(&des)),
+                    }
                 });
             }
 
-            Err(e) => println!("{}", e),
+            Err(e) => println!("{}", logger::timelog(e.description())),
         }
     }
 
@@ -268,7 +274,7 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
 }
 
 //get client TCP stream and send to channel
-fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<()> {
+fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
     let mut buf = [0; 100];
     stream.read(&mut buf)?;
 
@@ -278,7 +284,10 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
     let received_comm = String::from_utf8(buf_vec).unwrap();
 
     match day_care(kig, received_comm) {
-        Ok(resp) => stream.write_all(format!("server response: \n{}", resp).as_bytes()),
+        Ok(resp) => {
+            stream.write_all(format!("server response: \n{}", resp).as_bytes())?;
+            Ok(resp)
+        }
         Err(e) => {
             stream.write_all(format!("server response error: \n{}", e.description()).as_bytes())?;
             Err(e)
@@ -470,12 +479,13 @@ fn repeat(conf: Config, kig: Arc<Mutex<Kindergarten>>, name: String) -> String {
     //clone locked val to timer
     let timer_lock_val = Arc::clone(&kig);
     let next_time = conf.to_duration().unwrap();
+    let comm = conf.repeat_command().unwrap().clone();
 
     //give a timer
     thread::spawn(move || {
-        Timer::new_from_conf(name.clone(), conf)
+        Timer::new_from_conf(name, conf)
             .unwrap()
             .run(timer_lock_val) //:= TODO: need command parser
     });
-    format!(", and it will restart in {:?}", next_time)
+    format!(", and it will {} in {:?}", comm, next_time)
 }

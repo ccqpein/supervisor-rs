@@ -44,20 +44,29 @@ impl Timer {
         //check if this timer still works
         if !self.check(kig.clone()) {
             println!(
-                "check failed when timer try to run \"{} {}\"",
-                self.comm.clone(),
-                self.name.clone()
+                "{}",
+                logger::timelog(&format!(
+                    "check failed when timer try to run \"{} {}\"",
+                    self.comm.clone(),
+                    self.name.clone()
+                ))
             );
             return;
         }
 
         match server::day_care(kig, format!("{} {}", self.comm.clone(), self.name.clone())) {
-            Err(e) => println!("Timer is up, but {:?}", e.description()),
+            Err(e) => println!(
+                "{}",
+                logger::timelog(&format!("Timer is up, but {:?}", e.description()))
+            ),
             Ok(m) => println!(
-                "Timer is up, run \"{} {}\"\n{}",
-                self.comm.clone(),
-                self.name.clone(),
-                m,
+                "{}\n{}",
+                logger::timelog(&format!(
+                    "Timer is up, run \"{} {}\"",
+                    self.comm.clone(),
+                    self.name.clone(),
+                )),
+                logger::timelog(&m),
             ),
         }
     }

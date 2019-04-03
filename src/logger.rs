@@ -1,6 +1,6 @@
 use chrono::prelude::*;
 
-fn timelog(s: &str) -> String {
+pub fn timelog(s: &str) -> String {
     let mut dt = Local::now().format("[%Y-%m-%d %H:%M:%S] ").to_string();
     dt.push_str(s);
     dt
