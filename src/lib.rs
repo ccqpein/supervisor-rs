@@ -1,8 +1,8 @@
 pub mod client;
 pub mod kindergarten;
+pub mod logger;
 pub mod server;
 pub mod timer;
-pub mod logger;
 
 use std::error::Error;
 use std::fmt;
