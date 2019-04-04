@@ -1,5 +1,5 @@
 use super::server::*;
-use super::Config;
+use super::{logger, Config};
 use std::collections::HashMap;
 use std::io::{Error as ioError, ErrorKind, Result};
 use std::process::Child;
@@ -73,6 +73,11 @@ impl Kindergarten {
         //if stop all
         if name == "all" {
             return self.stop_all();
+        } else if name == "" {
+            return Err(ioError::new(
+                ErrorKind::InvalidData,
+                format!("you have to give which child you want to stop"),
+            ));
         }
 
         //get id
@@ -157,7 +162,10 @@ impl Kindergarten {
 
         for name in cache {
             self.delete_by_name(&name)?;
-            println!("{} has stopped, delete from kindergarden", name);
+            println!(
+                "{}",
+                logger::timelog(&format!("{} has stopped, delete from kindergarden", name))
+            );
         }
 
         Ok(())
@@ -184,13 +192,13 @@ impl Kindergarten {
         if name == "" {
             for (name, id) in self.name_list.iter() {
                 res.push_str(&format!(
-                    "=======================
+                    "
+=======================
 child name: {}
 processing id: {}
 config detail:
 {}
-=======================\n
-",
+=======================",
                     name,
                     id,
                     self.id_list.get(id).unwrap().1
@@ -199,13 +207,13 @@ config detail:
         } else {
             if let Some(id) = self.name_list.get(name) {
                 res.push_str(&format!(
-                    "=======================
+                    "
+=======================
 child name: {}
 processing id: {}
 config detail:
 {}
-=======================\n
-",
+=======================",
                     name,
                     id,
                     self.id_list.get(id).unwrap().1
@@ -213,6 +221,10 @@ config detail:
             }
         }
 
-        Ok(res)
+        if res.is_empty() {
+            Ok(String::from("check empty"))
+        } else {
+            Ok(res)
+        }
     }
 }

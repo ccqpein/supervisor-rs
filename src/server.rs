@@ -117,7 +117,7 @@ impl ServerConfig {
 
         Err(ioError::new(
             ErrorKind::NotFound,
-            logger::timelog(&format!("Cannot found '{}' file in load path", filename)),
+            format!("Cannot found '{}' file in load path", filename),
         ))
     }
 }
@@ -186,6 +186,23 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     };
 }
 
+fn child_name_legal_check(s: &str) -> core::result::Result<(), String> {
+    if s == "all" || s == "on" {
+        return Err(format!(
+            r#""{}" is reserved keywords, cannot run child named "{}""#,
+            s, s
+        ));
+    } else if client::Ops::is_op(s) {
+        //check if child name is keyword or not.
+        return Err(format!(
+            "this child name {} is one of keyword, cannot be child name",
+            s
+        ));
+    }
+
+    Ok(())
+}
+
 //Receive server config and start a new server
 //new server including:
 //1. a way receive command from client //move to start_deamon
@@ -209,14 +226,13 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     if server_conf.mode != "quiet" {
         //run all config already in load path
         for conf in server_conf.all_ymls_in_load_path()? {
-            if &conf.0 == "all" {
-                return Err(ioError::new(
-                    ErrorKind::InvalidInput,
-                    logger::timelog(&format!(
-                        "\"all\" is reserved keywords, cannot run child named \"all\""
-                    )),
-                ));
-            }
+            //legal check child name
+            //because client already check when it makes command...
+            //..., however, server un-quiet mode won't through client command check.
+            //so we need check again here.
+            if let Err(e) = child_name_legal_check(&conf.0) {
+                return Err(ioError::new(ErrorKind::InvalidInput, e));
+            };
 
             let mut child_config = Config::read_from_yaml_file(&conf.1)?;
 
@@ -224,6 +240,16 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
             //registe id
             let id = child_config.child_id.unwrap();
+            if child_config.is_repeat() {
+                println!(
+                    "{}",
+                    logger::timelog(&format!(
+                        "find child {} have repeat status, not support repeat in un-quiet mode",
+                        &conf.0
+                    ))
+                )
+            };
+
             kindergarten.register_id(id, child_handle, child_config);
             //regist name
             kindergarten.register_name(&conf.0, id);
@@ -285,11 +311,11 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
 
     match day_care(kig, received_comm) {
         Ok(resp) => {
-            stream.write_all(format!("server response: \n{}", resp).as_bytes())?;
+            stream.write_all(format!("server response: {}", resp).as_bytes())?;
             Ok(resp)
         }
         Err(e) => {
-            stream.write_all(format!("server response error: \n{}", e.description()).as_bytes())?;
+            stream.write_all(format!("server response error: {}", e.description()).as_bytes())?;
             Err(e)
         }
     }
@@ -317,9 +343,14 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             };
 
             let name = command.child_name.as_ref().unwrap();
-            let mut conf = server_conf.find_config_by_name(command.child_name.as_ref().unwrap())?;
+            //check name
+            if let Err(e) = child_name_legal_check(name) {
+                return Err(ioError::new(ErrorKind::InvalidInput, logger::timelog(&e)));
+            }
 
-            match kg.restart(command.child_name.as_ref().unwrap(), &mut conf) {
+            let mut conf = server_conf.find_config_by_name(name)?;
+
+            match kg.restart(name, &mut conf) {
                 Ok(_) => {
                     //repeat here
                     let repeat_meg = if conf.is_repeat() {
@@ -340,15 +371,12 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
         // hot start a new child after its config yaml file put in loadpath
         client::Ops::Start => {
-            //if file named \all", stop all behavior not consistent
-            if command.child_name.as_ref().unwrap() == "all" {
-                return Err(ioError::new(
-                    ErrorKind::Other,
-                    format!("\"all\" is reserved keywords"),
-                ));
+            let name = command.child_name.as_ref().unwrap();
+            if let Err(e) = child_name_legal_check(name) {
+                return Err(ioError::new(ErrorKind::InvalidInput, logger::timelog(&e)));
             }
 
-            if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
+            if let Some(_) = kg.has_child(name) {
                 return Err(ioError::new(
                     ErrorKind::Other,
                     format!(
@@ -364,7 +392,6 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ServerConfig::load(&kg.server_config_path)?
             };
 
-            let name = command.child_name.as_ref().unwrap();
             let mut conf = server_conf.find_config_by_name(&name)?;
 
             match start_new_child(&mut conf) {
@@ -401,11 +428,12 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         //if it has stopped for some reason, start it
         client::Ops::TryStart => {
             let mut resp = String::new();
+            let name = command.child_name.as_ref().unwrap();
 
             //check if it is running, stop it or not.
-            if let Some(_) = kg.has_child(command.child_name.as_ref().unwrap()) {
+            if let Some(_) = kg.has_child(name) {
                 resp.push_str("this child already start, stop it first.\n");
-                match kg.stop(command.child_name.as_ref().unwrap()) {
+                match kg.stop(name) {
                     Ok(_) => {
                         resp.push_str(&format!(
                             "stop {} success, start it again.\n",
@@ -428,8 +456,11 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ServerConfig::load(&kg.server_config_path)?
             };
 
-            let name = command.child_name.as_ref().unwrap();
-            let mut conf = server_conf.find_config_by_name(command.child_name.as_ref().unwrap())?;
+            if let Err(e) = child_name_legal_check(name) {
+                return Err(ioError::new(ErrorKind::InvalidInput, logger::timelog(&e)));
+            };
+
+            let mut conf = server_conf.find_config_by_name(name)?;
 
             match start_new_child(&mut conf) {
                 Ok(child_handle) => {

@@ -22,7 +22,6 @@ impl Ops {
             "Kill" | "kill" => return Ok(Ops::Kill),
             "TryStart" | "Trystart" | "trystart" => return Ok(Ops::TryStart),
             _ => {
-                println!("does not support {}", s);
                 return Err(Error::new(
                     ErrorKind::InvalidInput,
                     "no legal operations input",
@@ -40,6 +39,13 @@ impl Ops {
             Ops::Kill => return "kill".to_string(),
             Ops::TryStart => return "trystart".to_string(),
         }
+    }
+
+    pub fn is_op(s: &str) -> bool {
+        if let Ok(_) = Self::from_str(s) {
+            return true;
+        }
+        false
     }
 }
 
@@ -93,6 +99,13 @@ impl Command {
                     re.obj = Some(s[2].clone());
                 }
             } else {
+                if Ops::is_op(&s[1]) {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        format!("child name cannot be command"),
+                    ));
+                }
+
                 re.child_name = Some(s[1].clone());
                 if s.len() > 3 {
                     re.prep = Some(Prepositions::from_str(&s[2])?);
@@ -114,6 +127,13 @@ impl Command {
                     re.obj = Some(s[2].to_string());
                 }
             } else {
+                if Ops::is_op(&s[1]) {
+                    return Err(Error::new(
+                        ErrorKind::InvalidInput,
+                        format!("child name cannot be command"),
+                    ));
+                }
+
                 re.child_name = Some(s[1].to_string());
                 if s.len() > 3 {
                     re.prep = Some(Prepositions::from_str(&s[2])?);
@@ -123,5 +143,23 @@ impl Command {
         }
 
         Ok(re)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::error::Error;
+
+    #[test]
+    fn check_child_name() {
+        let case0 = vec!["restart", "restart"];
+        let comm = Command::new_from_str(case0);
+        dbg!(&comm);
+        assert!(comm.is_err());
+        assert_eq!(
+            comm.err().unwrap().description(),
+            "child name cannot be command"
+        );
     }
 }

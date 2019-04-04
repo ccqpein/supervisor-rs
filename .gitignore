@@ -6,3 +6,4 @@ GTAGS
 Cargo.lock
 .DS_Store
 deploy.sh
+test/client
