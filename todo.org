@@ -3,5 +3,4 @@
 - [ ] help command
 - [X] time of when start child
 - [X] timestamp in log of server
-- [ ] new server mode: can start one by one
 - [X] keyword filter
