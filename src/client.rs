@@ -7,6 +7,8 @@ pub enum Ops {
     Start,
     TryStart,
 
+    Help,
+
     Kill,
     Check,
 }
@@ -21,6 +23,7 @@ impl Ops {
             "Check" | "check" => return Ok(Ops::Check),
             "Kill" | "kill" => return Ok(Ops::Kill),
             "TryStart" | "Trystart" | "trystart" => return Ok(Ops::TryStart),
+            "Help" | "help" | "-h" => return Ok(Ops::Help),
             _ => {
                 return Err(Error::new(
                     ErrorKind::InvalidInput,
@@ -38,6 +41,7 @@ impl Ops {
             Ops::Check => return "check".to_string(),
             Ops::Kill => return "kill".to_string(),
             Ops::TryStart => return "trystart".to_string(),
+            Ops::Help => return "help".to_string(),
         }
     }
 

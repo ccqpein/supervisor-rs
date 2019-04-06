@@ -188,17 +188,15 @@ impl Kindergarten {
         //first check_around
         self.check_around()?;
 
-        let mut res = String::new();
+        let mut res = String::from("==Check Results Below==\n");
         if name == "" {
             for (name, id) in self.name_list.iter() {
                 res.push_str(&format!(
-                    "
-=======================
-child name: {}
+                    "child name: {}
 processing id: {}
 config detail:
 {}
-=======================",
+=======================\n",
                     name,
                     id,
                     self.id_list.get(id).unwrap().1
@@ -207,13 +205,11 @@ config detail:
         } else {
             if let Some(id) = self.name_list.get(name) {
                 res.push_str(&format!(
-                    "
-=======================
-child name: {}
+                    "child name: {}
 processing id: {}
 config detail:
 {}
-=======================",
+=======================\n",
                     name,
                     id,
                     self.id_list.get(id).unwrap().1

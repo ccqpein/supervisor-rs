@@ -1,16 +1,21 @@
 use std::env;
 use std::error::Error;
 use std::io::prelude::*;
-use std::io::Result;
 use std::net::TcpStream;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 use supervisor_rs::client::Command;
 
-fn main() -> Result<()> {
+fn main() {
     let arguments = env::args();
     let change_2_vec = arguments.collect::<Vec<String>>();
-    let cache_command = Command::new_from_string(change_2_vec[1..].to_vec())?;
+    let cache_command = match Command::new_from_string(change_2_vec[1..].to_vec()) {
+        Ok(c) => c,
+        Err(e) => {
+            println!("error: {}", e.description());
+            return;
+        }
+    };
 
     let mut stream = if let Some(_) = cache_command.prep {
         //parse ip address
@@ -37,8 +42,8 @@ fn main() -> Result<()> {
         match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
             Ok(s) => s,
             Err(e) => {
-                println!("{}", e.description());
-                return Err(e);
+                println!("error: {}", e.description());
+                return;
             }
         }
     } else {
@@ -47,8 +52,8 @@ fn main() -> Result<()> {
         match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
             Ok(s) => s,
             Err(e) => {
-                println!("{}", e.description());
-                return Err(e);
+                println!("error: {}", e.description());
+                return;
             }
         }
     };
@@ -60,12 +65,20 @@ fn main() -> Result<()> {
     );
 
     //println!("{:?}", data_2_server);
-    stream.write_all(data_2_server.as_bytes())?;
-    stream.flush()?;
+    if let Err(e) = stream.write_all(data_2_server.as_bytes()) {
+        println!("error: {}", e.description());
+        return;
+    };
+
+    if let Err(e) = stream.flush() {
+        println!("error: {}", e.description());
+        return;
+    };
 
     let mut response = String::new();
-    stream.read_to_string(&mut response)?;
+    if let Err(e) = stream.read_to_string(&mut response) {
+        println!("error: {}", e.description());
+        return;
+    };
     print!("{}", response);
-
-    Ok(())
 }

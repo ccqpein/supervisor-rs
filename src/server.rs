@@ -61,7 +61,6 @@ impl ServerConfig {
             }
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
-
         Ok(result)
     }
 
@@ -180,7 +179,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
         _ => {
             return Err(ioError::new(
                 ErrorKind::Other,
-                logger::timelog(&format!("Cannot start command {:?}", command)),
+                format!("Cannot start command {:?}", command),
             ));
         }
     };
@@ -231,15 +230,14 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
             //..., however, server un-quiet mode won't through client command check.
             //so we need check again here.
             if let Err(e) = child_name_legal_check(&conf.0) {
-                return Err(ioError::new(ErrorKind::InvalidInput, e));
+                println!("{}", logger::timelog(&e));
+                continue;
             };
 
             let mut child_config = Config::read_from_yaml_file(&conf.1)?;
 
             let child_handle = start_new_child(&mut child_config)?;
 
-            //registe id
-            let id = child_config.child_id.unwrap();
             if child_config.is_repeat() {
                 println!(
                     "{}",
@@ -250,6 +248,8 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
                 )
             };
 
+            //registe id
+            let id = child_config.child_id.unwrap();
             kindergarten.register_id(id, child_handle, child_config);
             //regist name
             kindergarten.register_name(&conf.0, id);
@@ -279,7 +279,7 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
                             //..first
                             let (first, second) = e.description().split_at(12);
                             if first == "I am dying. " {
-                                println!("{}", logger::timelog(second));
+                                print!("{}", logger::timelog(second));
                                 //tell main thread,
                                 sd_.send((first.to_string(), second.to_string())).unwrap();
                             } else {
@@ -311,11 +311,11 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
 
     match day_care(kig, received_comm) {
         Ok(resp) => {
-            stream.write_all(format!("server response: {}", resp).as_bytes())?;
+            stream.write_all(format!("server response: \n{}", resp).as_bytes())?;
             Ok(resp)
         }
         Err(e) => {
-            stream.write_all(format!("server response error: {}", e.description()).as_bytes())?;
+            stream.write_all(format!("server response error: \n{}", e.description()).as_bytes())?;
             Err(e)
         }
     }
@@ -336,17 +336,17 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
     match command.op {
         client::Ops::Restart => {
+            let name = command.child_name.as_ref().unwrap();
+            //check name
+            if let Err(e) = child_name_legal_check(name) {
+                return Err(ioError::new(ErrorKind::InvalidInput, e));
+            }
+
             let server_conf = if kg.server_config_path == "" {
                 ServerConfig::load("/tmp/server.yml")?
             } else {
                 ServerConfig::load(&kg.server_config_path)?
             };
-
-            let name = command.child_name.as_ref().unwrap();
-            //check name
-            if let Err(e) = child_name_legal_check(name) {
-                return Err(ioError::new(ErrorKind::InvalidInput, logger::timelog(&e)));
-            }
 
             let mut conf = server_conf.find_config_by_name(name)?;
 
@@ -373,7 +373,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         client::Ops::Start => {
             let name = command.child_name.as_ref().unwrap();
             if let Err(e) = child_name_legal_check(name) {
-                return Err(ioError::new(ErrorKind::InvalidInput, logger::timelog(&e)));
+                return Err(ioError::new(ErrorKind::InvalidInput, e));
             }
 
             if let Some(_) = kg.has_child(name) {
@@ -428,7 +428,11 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         //if it has stopped for some reason, start it
         client::Ops::TryStart => {
             let mut resp = String::new();
+
             let name = command.child_name.as_ref().unwrap();
+            if let Err(e) = child_name_legal_check(name) {
+                return Err(ioError::new(ErrorKind::InvalidInput, e));
+            };
 
             //check if it is running, stop it or not.
             if let Some(_) = kg.has_child(name) {
@@ -454,10 +458,6 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ServerConfig::load("/tmp/server.yml")?
             } else {
                 ServerConfig::load(&kg.server_config_path)?
-            };
-
-            if let Err(e) = child_name_legal_check(name) {
-                return Err(ioError::new(ErrorKind::InvalidInput, logger::timelog(&e)));
             };
 
             let mut conf = server_conf.find_config_by_name(name)?;
@@ -497,11 +497,18 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             // step2: return special err outside, let deamon know and stop
             Err(ioError::new(
                 ErrorKind::Other,
-                format!("I am dying. last error: {}", last_will),
+                format!("I am dying. last error: \n{}", last_will),
             ))
         }
 
         client::Ops::Check => kg.check_status(command.child_name.as_ref().unwrap()),
+
+        _ => {
+            return Err(ioError::new(
+                ErrorKind::InvalidInput,
+                logger::timelog("not support"),
+            ))
+        }
     }
 }
 

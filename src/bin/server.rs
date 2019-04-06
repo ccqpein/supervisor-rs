@@ -1,23 +1,32 @@
 use std::env;
-use std::io::Result;
+use std::error::Error;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use supervisor_rs::logger;
 use supervisor_rs::server;
 
-fn main() -> Result<()> {
+fn main() {
     let arguments = env::args();
     let change_2_vec = arguments.collect::<Vec<String>>();
 
     if change_2_vec.len() > 2 {
         println!("{}", "too much arguments, not support yet.");
-        return Ok(());
+        return;
     }
 
-    let k = if change_2_vec.len() != 1 {
-        server::start_new_server(&change_2_vec[1])?
+    let k_result = if change_2_vec.len() != 1 {
+        server::start_new_server(&change_2_vec[1])
     } else {
-        server::start_new_server("")?
+        server::start_new_server("")
+    };
+
+    let k = match k_result {
+        Ok(k) => k,
+        Err(e) => {
+            println!("{}", logger::timelog(e.description()));
+            return;
+        }
     };
 
     //make channel for deamon & main communication
@@ -33,9 +42,9 @@ fn main() -> Result<()> {
     for (f, _) in rx {
         if f == "I am dying. " {
             println!("see you!");
-            return Ok(());
+            return;
         }
     }
 
-    Ok(())
+    ()
 }
