@@ -17,6 +17,9 @@ fn main() {
         }
     };
 
+    //help command should be here
+
+    //build stream
     let mut stream = if let Some(_) = cache_command.prep {
         //parse ip address
         //only accept ip address
