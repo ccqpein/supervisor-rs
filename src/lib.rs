@@ -94,10 +94,9 @@ impl Output {
 #[derive(Debug, Clone)]
 pub struct Repeat {
     action: String,
-    seconds: u64,
+    seconds: i64,
 }
 
-//:= TODO: need write repeat logic in doc
 impl Repeat {
     fn new(input: &Yaml) -> Result<Self> {
         let mut result = Repeat {
@@ -110,7 +109,7 @@ impl Repeat {
             None => {
                 return Err(ioError::new(
                     ErrorKind::InvalidData,
-                    format!("output format wrong"),
+                    format!("repeat format wrong"),
                 ));
             }
         };
@@ -121,14 +120,28 @@ impl Repeat {
             }
         }
 
-        //:= TODO: 0 should not be legal interval, need check
-        if let Some(v) = repeat.get(&Yaml::from_str("seconds")) {
-            if let Some(a) = v.clone().into_i64() {
-                result.seconds = a as u64;
+        match repeat.get(&Yaml::from_str("seconds")) {
+            Some(v) => {
+                if let Some(a) = v.clone().into_i64() {
+                    result.seconds = a;
+                }
             }
-        }
+            None => {
+                return Err(ioError::new(
+                    ErrorKind::InvalidData,
+                    format!("seconds cannot be empty"),
+                ));
+            }
+        };
 
-        Ok(result)
+        if result.seconds > 0 {
+            Ok(result)
+        } else {
+            Err(ioError::new(
+                ErrorKind::InvalidData,
+                format!("seconds cannot less or equal 0"),
+            ))
+        }
     }
 }
 
@@ -172,10 +185,12 @@ impl Config {
                     }
                 }
 
-                result.repeat = if let Ok(r) = Repeat::new(&doc["repeat"]) {
-                    Some(r)
-                } else {
-                    None
+                result.repeat = match Repeat::new(&doc["repeat"]) {
+                    Ok(r) => Some(r),
+                    Err(e) => {
+                        println!("{}", logger::timelog(e.description()));
+                        None
+                    }
                 }
             }
 
@@ -228,7 +243,7 @@ impl Config {
                 ErrorKind::Other,
                 format!("repeat time cannot be 0"),
             )),
-            d => Ok(time::Duration::from_secs(d)),
+            d => Ok(time::Duration::from_secs(d as u64)),
         }
     }
 
@@ -261,8 +276,7 @@ impl fmt::Display for Config {
         write!(
             f,
             "  command is: {}\n  stdout is: {:?}\n  stderr is: {:?}\n  child id is:{:?}\n  repeat is: {:?}",
-            self.comm, self.stdout, self.stderr, self.child_id, self.repeat,            
-        )
+            self.comm, self.stdout, self.stderr, self.child_id, self.repeat)
     }
 }
 

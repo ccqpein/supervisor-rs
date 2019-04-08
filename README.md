@@ -107,6 +107,8 @@ then, when you start it, `supervisor-rs` will give a timer stand by and send bac
 
 Only `start`, `restart`, and `trystart` will let `supervisor-rs` create a timer, if `repeat` field exists.
 
+If `action` is empty, `supervisor-rs` will give `restart` be default value. However, `seconds` has to have value, and it cannot be 0.
+
 
 *How to stop repeat*
 
