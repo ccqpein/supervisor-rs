@@ -238,6 +238,8 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
             let child_handle = start_new_child(&mut child_config)?;
 
+            println!("{}", logger::timelog(&format!("start {} success", conf.0)));
+
             if child_config.is_repeat() {
                 println!(
                     "{}",
