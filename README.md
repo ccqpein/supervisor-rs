@@ -46,7 +46,7 @@ output:
 
 You can download compiled binary file directly on release tag.
 
-**Server Side**
+### Server Side ###
 
 Start server side application. After compiled, run `supervisor-rs-server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config path given, supervisor will going to find `server.yml` in `/tmp`.
 
@@ -61,7 +61,7 @@ Each sub-processing is named with **filename** of yaml file. If have multi-loadp
 run server with special config file:
 `supervisor-rs-server ./test/server.yml` 
 
-**Client Side**
+### Client Side ###
 
 *Restart child processing*:
 
@@ -82,7 +82,7 @@ commands:
 | trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
 | kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
 
-**Repeat feature**
+### Repeat feature ###
 
 if config of child has `repeat` field:
 
@@ -110,7 +110,7 @@ Only `start`, `restart`, and `trystart` will let `supervisor-rs` create a timer,
 If `action` is empty, `supervisor-rs` will give `restart` be default value. However, `seconds` has to have value, and it cannot be 0.
 
 
-*How to stop repeat*
+#### How to stop repeat ####
 
 As I said above, `timer` be created right after child runs. So you cannot stop "next" action, but if you change child's config, like delete repeat field, then "next" action won't create a timer. 
 
@@ -118,7 +118,14 @@ This is because all `start`, `restart` and `trystart` will **reload** config of 
 
 So, what will supervisor do if child has `stopped`, or `restart` manually before timer finish its waiting and send command to supervisor again, timer isn't outdated? Timer will check if child has same processing id as when it created timer. If this check passed, timer will do its job as normal, else, timer won't do anything because child current is not child before.
 
-**Cross compiling**
+### What if accident happens ###
+
+* if supervisor-rs be killed by `kill`, children won't stop, they will be taken by system.
+* if supervisor-rs panic, children won't stop.
+
+Go to log to find more information if `supervisor-rs-server` have problem
+
+## Cross compiling ##
 
 `brew tap filosottile/musl-cross && brew install FiloSottile/musl-cross/musl-cross`
 
