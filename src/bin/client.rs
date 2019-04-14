@@ -4,7 +4,7 @@ use std::io::prelude::*;
 use std::net::TcpStream;
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
-use supervisor_rs::client::Command;
+use supervisor_rs::client::{Command, Ops};
 
 fn main() {
     let arguments = env::args();
@@ -17,7 +17,11 @@ fn main() {
         }
     };
 
-    //help command should be here
+    //:= TODO: help command should be here
+    if let Ops::Help = cache_command.op {
+        println!("{}", help());
+        return;
+    }
 
     //build stream
     let mut stream = if let Some(_) = cache_command.prep {
@@ -84,4 +88,28 @@ fn main() {
         return;
     };
     print!("{}", response);
+}
+
+fn help() -> String {
+    String::from(
+        "\
+Supervisor-rs used to manage precessings on server
+
+supervisor-rs-server running on server side.
+supervisor-rs-client used to send command to server side.
+
+Example:
+
+supervisor-rs-client start child1
+
+supervisor-rs-client restart child1 on 192.168.1.1
+
+Commands:
+
+start/restart/kill/check/stop/kill
+
+more detail:
+https://github.com/ccqpein/supervisor-rs#usage
+",
+    )
 }
