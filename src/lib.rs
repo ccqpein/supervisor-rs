@@ -107,10 +107,7 @@ impl Repeat {
         let repeat = match input.as_hash() {
             Some(v) => v,
             None => {
-                return Err(ioError::new(
-                    ErrorKind::InvalidData,
-                    format!("repeat format wrong"),
-                ));
+                return Err(ioError::new(ErrorKind::NotFound, format!("cannot found")));
             }
         };
 
@@ -188,7 +185,9 @@ impl Config {
                 result.repeat = match Repeat::new(&doc["repeat"]) {
                     Ok(r) => Some(r),
                     Err(e) => {
-                        println!("{}", logger::timelog(e.description()));
+                        if e.kind() != ErrorKind::NotFound {
+                            println!("{}", logger::timelog(e.description()));
+                        }
                         None
                     }
                 }

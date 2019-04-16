@@ -1,6 +1,9 @@
-* \TODO LIST 
+* LIST 
 
-- [ ] help command
-- [X] time of when start child
-- [X] timestamp in log of server
-- [X] keyword filter
+** TODO Server side should has abilitu to create log file [0/2]
+   - [ ] maybe put this feature in logger.rs
+   - [ ] define log file path in config
+
+** TODO Server side shoud has ability to start several children at startup [1/2]
+   - [X] maybe put these children in config
+   - [ ] test

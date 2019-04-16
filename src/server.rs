@@ -4,6 +4,7 @@ use super::logger;
 use super::timer::*;
 use super::{Config, OutputMode};
 
+use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -21,6 +22,7 @@ struct ServerConfig {
     //path for all children's configs
     load_paths: Vec<String>,
     mode: String,
+    startup_list: Option<Vec<String>>,
 }
 
 impl ServerConfig {
@@ -39,6 +41,7 @@ impl ServerConfig {
 
             //quiet mode is default value now
             mode: "quiet".to_string(),
+            startup_list: None,
         };
 
         match temp {
@@ -58,9 +61,44 @@ impl ServerConfig {
                     None => return Ok(result),
                 };
                 result.mode = mode;
+
+                let startup_children = match doc["startup"].as_vec() {
+                    Some(v) => v
+                        .iter()
+                        .map(|x| x.clone().into_string().unwrap())
+                        .collect::<Vec<String>>(),
+                    None => return Ok(result),
+                };
+                result.startup_list = Some(startup_children);
             }
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
+        Ok(result)
+    }
+
+    //when mode == "half"
+    //it should return all children details those in loadpaths also...
+    //in startup field of server config.
+    fn half_mode(&self) -> Result<Vec<(String, String)>> {
+        let children_set = match &self.startup_list {
+            Some(startups) => startups.iter().collect::<HashSet<&String>>(),
+            None => return Err(ioError::new(ErrorKind::NotFound, "startup list not found")),
+        };
+
+        let all_children = self.all_ymls_in_load_path()?;
+
+        let result = all_children
+            .into_iter()
+            .filter(|x| children_set.contains(&x.1))
+            .collect::<Vec<(String, String)>>();
+
+        if result.len() == 0 {
+            return Err(ioError::new(
+                ErrorKind::InvalidData,
+                "none of startup children be found in loadpaths",
+            ));
+        }
+
         Ok(result)
     }
 
@@ -221,41 +259,43 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //store server config location
     kindergarten.server_config_path = config_path.to_string();
 
-    //if mode == quiet, don't run initial
-    if server_conf.mode != "quiet" {
-        //run all config already in load path
-        for conf in server_conf.all_ymls_in_load_path()? {
-            //legal check child name
-            //because client already check when it makes command...
-            //..., however, server un-quiet mode won't through client command check.
-            //so we need check again here.
-            if let Err(e) = child_name_legal_check(&conf.0) {
-                println!("{}", logger::timelog(&e));
-                continue;
-            };
+    let startup_children = match server_conf.mode.as_ref() {
+        "full" => server_conf.all_ymls_in_load_path()?,
+        "half" => server_conf.half_mode()?,
+        "quiet" | _ => vec![],
+    };
 
-            let mut child_config = Config::read_from_yaml_file(&conf.1)?;
+    for conf in startup_children {
+        //legal check child name
+        //because client already check when it makes command...
+        //..., however, server un-quiet mode won't through client command check.
+        //so we need check again here.
+        if let Err(e) = child_name_legal_check(&conf.0) {
+            println!("{}", logger::timelog(&e));
+            continue;
+        };
 
-            let child_handle = start_new_child(&mut child_config)?;
+        let mut child_config = Config::read_from_yaml_file(&conf.1)?;
 
-            println!("{}", logger::timelog(&format!("start {} success", conf.0)));
+        let child_handle = start_new_child(&mut child_config)?;
 
-            if child_config.is_repeat() {
-                println!(
-                    "{}",
-                    logger::timelog(&format!(
-                        "find child {} have repeat status, not support repeat in un-quiet mode",
-                        &conf.0
-                    ))
-                )
-            };
+        println!("{}", logger::timelog(&format!("start {} success", conf.0)));
 
-            //registe id
-            let id = child_config.child_id.unwrap();
-            kindergarten.register_id(id, child_handle, child_config);
-            //regist name
-            kindergarten.register_name(&conf.0, id);
-        }
+        if child_config.is_repeat() {
+            println!(
+                "{}",
+                logger::timelog(&format!(
+                    "find child {} have repeat status, not support repeat in un-quiet mode",
+                    &conf.0
+                ))
+            )
+        };
+
+        //registe id
+        let id = child_config.child_id.unwrap();
+        kindergarten.register_id(id, child_handle, child_config);
+        //regist name
+        kindergarten.register_name(&conf.0, id);
     }
 
     Ok(kindergarten)
