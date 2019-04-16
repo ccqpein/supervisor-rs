@@ -362,7 +362,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                     };
 
                     Ok(format!(
-                        "restart {} success{}",
+                        "restart {} success{}\n",
                         command.child_name.as_ref().unwrap(),
                         repeat_meg,
                     ))
@@ -382,7 +382,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 return Err(ioError::new(
                     ErrorKind::Other,
                     format!(
-                        "Cannot start this child {}, it already exsits",
+                        "Cannot start this child {}, it already exsits\n",
                         command.child_name.unwrap()
                     ),
                 ));
@@ -409,7 +409,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                         String::new()
                     };
 
-                    Ok(format!("start {} success{}", name.clone(), repeat_meg))
+                    Ok(format!("start {} success{}\n", name.clone(), repeat_meg))
                 }
                 Err(e) => Err(e),
             }
@@ -418,7 +418,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         client::Ops::Stop => match kg.stop(command.child_name.as_ref().unwrap()) {
             Ok(_) => {
                 return Ok(format!(
-                    "stop {} success",
+                    "stop {} success\n",
                     command.child_name.as_ref().unwrap()
                 ));
             }
@@ -478,7 +478,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                     };
 
                     resp.push_str(&format!(
-                        "start {} success{}",
+                        "start {} success{}\n",
                         command.child_name.as_ref().unwrap(),
                         repeat_meg,
                     ));
@@ -493,13 +493,16 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             let mut last_will = String::new();
             // step1: stop all
             if let Err(e) = kg.stop(&"all".to_string()) {
-                last_will.push_str(&format!("there is error when stop all {}", e.description()));
+                last_will.push_str(&format!(
+                    "there is error when stop all {}\n",
+                    e.description()
+                ));
             }
 
             // step2: return special err outside, let deamon know and stop
             Err(ioError::new(
                 ErrorKind::Other,
-                format!("I am dying. last error: \n{}", last_will),
+                format!("I am dying. last error: \n{}\n", last_will),
             ))
         }
 
