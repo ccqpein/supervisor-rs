@@ -4,6 +4,7 @@
    - [ ] maybe put this feature in logger.rs
    - [ ] define log file path in config
 
-** TODO Server side shoud has ability to start several children at startup [1/2]
+** TODO Server side shoud has ability to start several children at startup [2/3]
    - [X] maybe put these children in config
+   - [X] should print log out
    - [ ] test

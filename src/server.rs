@@ -92,13 +92,6 @@ impl ServerConfig {
             .filter(|x| children_set.contains(&x.1))
             .collect::<Vec<(String, String)>>();
 
-        if result.len() == 0 {
-            return Err(ioError::new(
-                ErrorKind::InvalidData,
-                "none of startup children be found in loadpaths",
-            ));
-        }
-
         Ok(result)
     }
 
@@ -259,12 +252,28 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //store server config location
     kindergarten.server_config_path = config_path.to_string();
 
+    //make startup children vec
     let startup_children = match server_conf.mode.as_ref() {
         "full" => server_conf.all_ymls_in_load_path()?,
         "half" => server_conf.half_mode()?,
         "quiet" | _ => vec![],
     };
 
+    //print log
+    if startup_children.len() != 0 {
+        println!(
+            "{}",
+            logger::timelog(&format!(
+                "these children will start with server startup: {:?}",
+                startup_children
+                    .iter()
+                    .map(|x| x.1.clone())
+                    .collect::<Vec<String>>()
+            ))
+        );
+    }
+
+    //start children with server
     for conf in startup_children {
         //legal check child name
         //because client already check when it makes command...
