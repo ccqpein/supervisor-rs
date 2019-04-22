@@ -84,7 +84,7 @@ commands:
 
 ### Startup-with feature ###
 
-If `server's config` mode is `half`, server will try to startup all children in `startup` when it start.
+If `server's config` mode is `half`, server will try to startup all children in `startup` list when it starts.
 
 Demo:
 
