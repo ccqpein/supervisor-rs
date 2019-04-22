@@ -26,7 +26,7 @@ loadpaths:
   - /tmp/client/
   - /tmp/second/path
   
-mode: unquiet
+mode: "full"
 ```
 
 each command's config:
@@ -50,9 +50,9 @@ You can download compiled binary file directly on release tag.
 
 Start server side application. After compiled, run `supervisor-rs-server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config path given, supervisor will going to find `server.yml` in `/tmp`.
 
-After server application start, if `mode` is not **quiet**, then all **application yaml files under loadpath of server config** will be ran by application. So, that's means every yaml files in there should be legal application config file, or server cannot start.
+After server application start, if `mode` is **full**, then all **application yaml files under loadpath of server config** will be ran by application. So, that's means every yaml files in there should be legal application config file, or server cannot start.
 
-Server side's default mode is quiet, means server will record `loadphths`, but won't start children automatically.
+Server side's default mode is `quiet`, means server will record `loadphths`, but won't start children automatically.
 
 Each sub-processing is named with **filename** of yaml file. If have multi-loadpath, make sure **no yaml files have same name**. 
 
@@ -81,6 +81,36 @@ commands:
 | check    | return summary of all children who are **running**. If children are not running, no matter what reason, they will be cleaned from kindergarden's table.                                                                                                                                    |
 | trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
 | kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
+
+### Startup-with feature ###
+
+If `server's config` mode is `half`, server will try to startup all children in `startup` when it start.
+
+Demo:
+
+```yaml
+#server side config
+loadpaths:
+  - /tmp/client/
+  - /tmp/second/path
+  
+mode: "half"
+startup:
+  - child1
+  - child2
+  - child3
+```
+
+server will try to start `child1`, `child2`, and `child3` when 
+
+**QA:**
+
+Q: if child3 not exist?
+A: server will going to find children in `startup`, if some of them not exist in loadpaths, server will skip them.
+
+Q: what if I forget write mode to half?
+A: server default mode is quiet, and startup list only used in `half` mode, otherwise, `startup` won't effect anything.
+
 
 ### Repeat feature ###
 

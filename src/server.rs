@@ -290,6 +290,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
         println!("{}", logger::timelog(&format!("start {} success", conf.0)));
 
+        //because repeat function need kindergarden be created.
         if child_config.is_repeat() {
             println!(
                 "{}",
