@@ -89,7 +89,7 @@ impl ServerConfig {
 
         let result = all_children
             .into_iter()
-            .filter(|x| children_set.contains(&x.1))
+            .filter(|x| children_set.contains(&x.0))
             .collect::<Vec<(String, String)>>();
 
         Ok(result)
