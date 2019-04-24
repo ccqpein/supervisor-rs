@@ -1,10 +1,11 @@
 * LIST 
 
-** TODO Server side should has abilitu to create log file [0/2]
-   - [ ] maybe put this feature in logger.rs
-   - [ ] define log file path in config
-
-** TODO Server side shoud has ability to start several children at startup [2/3]
+** DONE Server side shoud has ability to start several children at startup [3/3]
+   CLOSED: [2019-04-24 Wed 11:14]
    - [X] maybe put these children in config
    - [X] should print log out
-   - [ ] test
+   - [X] test
+
+** TODO Triger feature of children
+   - [ ] child can has triger before/after some command run
+   - [ ] 
