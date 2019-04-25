@@ -1,8 +1,8 @@
+use super::child::{child_output::OutputMode, Config};
 use super::client;
 use super::kindergarten::*;
 use super::logger;
 use super::timer::*;
-use super::{Config, OutputMode};
 
 use std::collections::HashSet;
 use std::error::Error;

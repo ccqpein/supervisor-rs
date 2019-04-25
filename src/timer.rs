@@ -1,10 +1,10 @@
 use super::kindergarten::*;
 use super::server;
 use super::*;
-use std::io::Error as ioError;
-use std::{thread, time};
-
+use std::error::Error;
+use std::io::{Error as ioError, ErrorKind, Result};
 use std::sync::{Arc, Mutex};
+use std::{thread, time};
 
 pub struct Timer {
     name: String,
@@ -23,7 +23,7 @@ impl Timer {
         }
     }
 
-    pub fn new_from_conf(name: String, conf: super::Config) -> Result<Self> {
+    pub fn new_from_conf(name: String, conf: child::Config) -> Result<Self> {
         if !conf.is_repeat() {
             return Err(ioError::new(
                 ErrorKind::InvalidInput,

@@ -1,5 +1,6 @@
+use super::child::Config;
+use super::logger;
 use super::server::*;
-use super::{logger, Config};
 use std::collections::HashMap;
 use std::io::{Error as ioError, ErrorKind, Result};
 use std::process::Child;
