@@ -1,3 +1,4 @@
+mod child_hook;
 pub mod child_output;
 mod child_repeat;
 
