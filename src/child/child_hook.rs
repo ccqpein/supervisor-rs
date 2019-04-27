@@ -1,10 +1,10 @@
 use std::collections::HashMap;
-use std::io::{Error as ioError, ErrorKind, Read, Result};
+use std::io::{Error as ioError, ErrorKind, Result};
 
 use yaml_rust::Yaml;
 
 #[derive(Debug)]
-struct Hooks {
+pub struct Hooks {
     hook_table: HashMap<String, String>,
 }
 
@@ -47,7 +47,7 @@ impl Hooks {
 #[cfg(test)]
 mod tests {
     use super::Hooks;
-    use yaml_rust::Yaml;
+    //use yaml_rust::Yaml;
     use yaml_rust::YamlLoader;
 
     #[test]
@@ -82,6 +82,10 @@ hooks:
 ",
         )
         .unwrap();
+
+        println!("{:#?}", Hooks::new(&test2[0]["hooks"]));
+
+        let test3 = YamlLoader::load_from_str("").unwrap();
 
         println!("{:#?}", Hooks::new(&test2[0]["hooks"]));
     }

@@ -10,6 +10,7 @@ use std::io::{Error as ioError, ErrorKind, Read, Result};
 use std::time;
 use yaml_rust::YamlLoader;
 
+use child_hook::Hooks;
 use child_output::Output;
 use child_repeat::Repeat;
 
@@ -20,6 +21,7 @@ pub struct Config {
     pub stderr: Option<Output>,
     pub child_id: Option<u32>,
     repeat: Option<Repeat>,
+    hooks: Option<Hooks>,
 }
 
 impl Config {
@@ -30,6 +32,7 @@ impl Config {
             stderr: None,
             child_id: None,
             repeat: None,
+            hooks: None,
         }
     }
 
@@ -137,6 +140,7 @@ impl Clone for Config {
             stderr: self.stderr.clone(),
             child_id: self.child_id,
             repeat: self.repeat.clone(),
+            //hooks: self.hooks,
         }
     }
 }
