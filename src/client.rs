@@ -159,7 +159,6 @@ mod tests {
     fn check_child_name() {
         let case0 = vec!["restart", "restart"];
         let comm = Command::new_from_str(case0);
-        dbg!(&comm);
         assert!(comm.is_err());
         assert_eq!(
             comm.err().unwrap().description(),

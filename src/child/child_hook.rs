@@ -19,7 +19,7 @@ impl Hooks {
             None => {
                 return Err(ioError::new(
                     ErrorKind::InvalidData,
-                    format!("output format wrong"),
+                    format!("hook format wrong"),
                 ));
             }
         };
@@ -41,6 +41,14 @@ impl Hooks {
         }
 
         Ok(result)
+    }
+}
+
+impl Clone for Hooks {
+    fn clone(&self) -> Self {
+        Self {
+            hook_table: self.hook_table.clone(),
+        }
     }
 }
 
@@ -85,8 +93,13 @@ hooks:
 
         println!("{:#?}", Hooks::new(&test2[0]["hooks"]));
 
-        let test3 = YamlLoader::load_from_str("").unwrap();
+        let test3 = YamlLoader::load_from_str(
+            "
+test: a
+",
+        )
+        .unwrap();
 
-        println!("{:#?}", Hooks::new(&test2[0]["hooks"]));
+        println!("{:#?}", Hooks::new(&test3[0]["hooks"]));
     }
 }

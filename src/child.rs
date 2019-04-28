@@ -64,6 +64,16 @@ impl Config {
                         }
                         None
                     }
+                };
+
+                result.hooks = match Hooks::new(&doc["hooks"]) {
+                    Ok(h) => Some(h),
+                    Err(e) => {
+                        if e.kind() != ErrorKind::NotFound {
+                            println!("{}", logger::timelog(e.description()));
+                        }
+                        None
+                    }
                 }
             }
 
@@ -140,7 +150,7 @@ impl Clone for Config {
             stderr: self.stderr.clone(),
             child_id: self.child_id,
             repeat: self.repeat.clone(),
-            //hooks: self.hooks,
+            hooks: self.hooks.clone(),
         }
     }
 }
@@ -149,7 +159,7 @@ impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "  command is: {}\n  stdout is: {:?}\n  stderr is: {:?}\n  child id is:{:?}\n  repeat is: {:?}",
+            "  command is: {}\n  stdout is: {:?}\n  stderr is: {:?}\n  child id is: {:?}\n  repeat is: {:?}",
             self.comm, self.stdout, self.stderr, self.child_id, self.repeat)
     }
 }
@@ -177,4 +187,24 @@ mod tests {
 
         let _ = dbg!(start_new_child(&mut con));
     }
+
+    #[test]
+    fn read_hooks() {
+        let input0 = "
+command: test
+hooks:
+  - prehook: start child1
+  - posthook: start child2
+  - posthook: start child3
+";
+        println!("read_hooks 0: {:?}", Config::read_from_str(input0));
+
+        let input1 = "
+command: test
+hooks:
+";
+
+        println!("read_hooks 1: {:?}", Config::read_from_str(input1));
+    }
+
 }
