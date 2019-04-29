@@ -140,6 +140,21 @@ impl Config {
 
         Ok(self.repeat.as_ref().unwrap().action.clone())
     }
+
+    pub fn has_hook(&self) -> bool {
+        if let Some(h) = &self.hooks {
+            return h.has_hook();
+        }
+        false
+    }
+
+    pub fn get_hook(&self, key: &String) -> Option<String> {
+        if self.has_hook() {
+            return self.hooks.as_ref().unwrap().get_hook_command(key);
+        }
+
+        None
+    }
 }
 
 impl Clone for Config {

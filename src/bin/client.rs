@@ -17,7 +17,6 @@ fn main() {
         }
     };
 
-    //:= TODO: help command should be here
     if let Ops::Help = cache_command.op {
         println!("{}", help());
         return;

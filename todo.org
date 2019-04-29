@@ -9,3 +9,5 @@
 ** TODO Triger feature of children
    - [ ] child can has triger before/after some command run
    - [ ] hook behavior should be a legal child too
+
+** TODO Change listen ip

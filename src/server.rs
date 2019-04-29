@@ -295,7 +295,18 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
             println!(
                 "{}",
                 logger::timelog(&format!(
-                    "find child {} have repeat status, not support repeat in un-quiet mode",
+                    "find child {} has repeat status, not support repeat in un-quiet mode during server startup",
+                    &conf.0
+                ))
+            )
+        };
+
+        //because repeat function need kindergarden be created.
+        if child_config.has_hook() {
+            println!(
+                "{}",
+                logger::timelog(&format!(
+                    "find child {} has hook(s), not support prehook in un-quiet mode during server startup",
                     &conf.0
                 ))
             )
@@ -315,6 +326,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 //keep taking care children
 pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, String)>) -> Result<()> {
     //start TCP listener to receive client commands
+    //:= TODO: should has ability to change listen ip
     let listener = TcpListener::bind(format!("{}:{}", "0.0.0.0", 33889))?;
 
     for stream in listener.incoming() {
@@ -446,12 +458,8 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
             let mut conf = server_conf.find_config_by_name(&name)?;
 
-            match start_new_child(&mut conf) {
-                Ok(child_handle) => {
-                    let id = conf.child_id.unwrap();
-                    kg.register_id(id, child_handle, conf.clone());
-                    kg.register_name(&name, id);
-
+            match kg.start(name, &mut conf) {
+                Ok(_) => {
                     //repeat here
                     let repeat_meg = if conf.is_repeat() {
                         repeat(conf, Arc::clone(&kig), name.clone())
@@ -578,7 +586,7 @@ fn repeat(conf: Config, kig: Arc<Mutex<Kindergarten>>, name: String) -> String {
     thread::spawn(move || {
         Timer::new_from_conf(name, conf)
             .unwrap()
-            .run(timer_lock_val) //:= TODO: need command parser
+            .run(timer_lock_val)
     });
     format!(", and it will {} in {:?}", comm, next_time)
 }

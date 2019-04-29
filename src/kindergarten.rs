@@ -41,15 +41,23 @@ impl Kindergarten {
         self.register_name(name, id);
     }
 
-    //receive new config instead of read from kindergarten because maybe config change
-    //child which restart must be running child, so it can stop first
-    //Step:
-    //1. kill old one
-    //2. start new one
-    //3. update kindergarten
-    pub fn restart(&mut self, name: &String, config: &mut Config) -> Result<()> {
-        //if this child is not running, it cannot be stopped, return err
-        self.stop(name)?;
+    fn handle_pre_hook(&mut self, hook_comm: &String, config: &mut Config) -> Result<()> {
+        let cut_comm = hook_comm.split_whitespace().collect::<Vec<&str>>();
+
+        match cut_comm[0] {
+            "start" | "Start" => self.start(&cut_comm[1].to_string(), config),
+            _ => Ok(()),
+        }
+    }
+
+    //start child
+    //this function will start child without if child has been started or not.
+    //use self.has_child to check outside
+    pub fn start(&mut self, name: &String, config: &mut Config) -> Result<()> {
+        //:= TODO: need check prehook circle before call it
+        if let Some(hook) = config.get_hook(&String::from("prehook")) {
+            self.handle_pre_hook(&hook, config)?
+        }
 
         //start new child
         match start_new_child(config) {
@@ -67,6 +75,20 @@ impl Kindergarten {
                 ));
             }
         }
+    }
+
+    //receive new config instead of read from kindergarten because maybe config change
+    //child which restart must be running child, so it can stop first
+    //Step:
+    //1. kill old one
+    //2. start new one
+    //3. update kindergarten
+    pub fn restart(&mut self, name: &String, config: &mut Config) -> Result<()> {
+        //if this child is not running, it cannot be stopped, return err
+        self.stop(name)?;
+
+        //start new child
+        self.start(name, config)
     }
 
     //stop child, and delete it in kg, after this method, do not need delete child

@@ -42,6 +42,24 @@ impl Hooks {
 
         Ok(result)
     }
+
+    pub fn has_hook(&self) -> bool {
+        self.hook_table.len() != 0
+    }
+
+    pub fn get(&self, key: &String) -> Option<&String> {
+        self.hook_table.get(key)
+    }
+
+    //:= TODO: need test
+    pub fn get_hook_command(&self, key: &String) -> Option<String> {
+        if let Some(hook_com) = self.get(key) {
+            if let Some(com) = hook_com.split_whitespace().next() {
+                return Some(com.to_string());
+            }
+        }
+        None
+    }
 }
 
 impl Clone for Hooks {
