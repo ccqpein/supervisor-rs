@@ -51,12 +51,22 @@ impl Hooks {
         self.hook_table.get(key)
     }
 
+    pub fn get_hook_detail(&self, key: &String) -> Option<Vec<String>> {
+        if let Some(hook_comm) = self.get(key) {
+            return Some(
+                hook_comm
+                    .split_whitespace()
+                    .map(|x| x.to_string())
+                    .collect::<Vec<String>>(),
+            );
+        }
+        None
+    }
+
     //:= TODO: need test
     pub fn get_hook_command(&self, key: &String) -> Option<String> {
-        if let Some(hook_com) = self.get(key) {
-            if let Some(com) = hook_com.split_whitespace().next() {
-                return Some(com.to_string());
-            }
+        if let Some(hook) = self.get_hook_detail(key) {
+            return Some(hook[0].clone());
         }
         None
     }

@@ -150,6 +150,11 @@ impl ServerConfig {
             format!("Cannot found '{}' file in load path", filename),
         ))
     }
+
+    //:= TODO: get config prehook details, find them one by one make sure no circle inside
+    fn pre_hook_check(&self, start: &Config) -> Result<()> {
+        Ok(())
+    }
 }
 
 //start a child processing, and give child_handle
