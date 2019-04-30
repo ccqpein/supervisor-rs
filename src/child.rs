@@ -155,6 +155,13 @@ impl Config {
 
         None
     }
+
+    pub fn get_hook_detail(&self, key: &String) -> Option<Vec<String>> {
+        if self.has_hook() {
+            return self.hooks.as_ref().unwrap().get_hook_detail(key);
+        }
+        None
+    }
 }
 
 impl Clone for Config {

@@ -152,8 +152,29 @@ impl ServerConfig {
     }
 
     //:= TODO: get config prehook details, find them one by one make sure no circle inside
-    fn pre_hook_check(&self, start: &Config) -> Result<()> {
-        Ok(())
+    //:= TEST:
+    fn pre_hook_check(&self, start: &Config) -> Result<bool> {
+        let mut call_chain = HashSet::new();
+
+        fn recursive_check(
+            server_conf: &ServerConfig,
+            start: &Config,
+            result: &mut HashSet<String>,
+        ) -> bool {
+            if let Some(hook) = start.get_hook_detail(&String::from("prehook")) {
+                if result.contains(&hook[1]) {
+                    return false;
+                }
+                if let Ok(next_config) = server_conf.find_config_by_name(&hook[1]) {
+                    result.insert(hook[1]);
+                    return recursive_check(server_conf, &next_config, result);
+                }
+                return false; //if hook child not exsit
+            }
+            true //test fine
+        }
+
+        Ok(true)
     }
 }
 
