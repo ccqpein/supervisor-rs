@@ -18,7 +18,7 @@ impl Hooks {
             Some(hooks) => hooks,
             None => {
                 return Err(ioError::new(
-                    ErrorKind::InvalidData,
+                    ErrorKind::NotFound,
                     format!("hook format wrong"),
                 ));
             }

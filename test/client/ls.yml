@@ -1,5 +1,0 @@
-command: ls -al
-
-repeat:
-  action: restart
-  seconds: 5

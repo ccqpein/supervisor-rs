@@ -41,24 +41,24 @@ impl Kindergarten {
         self.register_name(name, id);
     }
 
-    fn handle_pre_hook(&mut self, hook_comm: &String, config: &mut Config) -> Result<()> {
-        let cut_comm = hook_comm.split_whitespace().collect::<Vec<&str>>();
-
-        match cut_comm[0] {
-            "start" | "Start" => self.start(&cut_comm[1].to_string(), config),
-            _ => Ok(()),
+    //pre_hook_chain: Vec<(command, name, config)>
+    pub fn handle_pre_hook(&mut self, pre_hook_chain: Vec<(String, String, Config)>) -> Result<()> {
+        //pre_hook_chain.reverse();
+        for each in pre_hook_chain.iter() {
+            match each.0.as_ref() {
+                "start" | "Start" => self.start(&each.1, &mut each.2.clone())?,
+                "restart" | "Restart" => self.restart(&each.1, &mut each.2.clone())?,
+                "stop" | "Stop" => self.stop(&each.1)?,
+                _ => (),
+            };
         }
+        Ok(())
     }
 
     //start child
     //this function will start child without if child has been started or not.
     //use self.has_child to check outside
     pub fn start(&mut self, name: &String, config: &mut Config) -> Result<()> {
-        //:= TODO: need check prehook circle before call it
-        if let Some(hook) = config.get_hook(&String::from("prehook")) {
-            self.handle_pre_hook(&hook, config)?
-        }
-
         //start new child
         match start_new_child(config) {
             Ok(child) => {

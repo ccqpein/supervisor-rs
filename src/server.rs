@@ -151,30 +151,61 @@ impl ServerConfig {
         ))
     }
 
-    //:= TODO: get config prehook details, find them one by one make sure no circle inside
-    //:= TEST:
-    fn pre_hook_check(&self, start: &Config) -> Result<bool> {
-        let mut call_chain = HashSet::new();
-
-        fn recursive_check(
-            server_conf: &ServerConfig,
-            start: &Config,
-            result: &mut HashSet<String>,
-        ) -> bool {
-            if let Some(hook) = start.get_hook_detail(&String::from("prehook")) {
-                if result.contains(&hook[1]) {
-                    return false;
-                }
-                if let Ok(next_config) = server_conf.find_config_by_name(&hook[1]) {
-                    result.insert(hook[1]);
-                    return recursive_check(server_conf, &next_config, result);
-                }
-                return false; //if hook child not exsit
+    fn recursive_check(
+        &self,
+        start: &Config,
+        result: &mut HashSet<String>,
+        chain: &mut Vec<(String, String)>,
+    ) -> bool {
+        if let Some(hook) = start.get_hook_detail(&String::from("prehook")) {
+            if result.contains(&hook[1]) {
+                return false;
             }
-            true //test fine
+            if let Ok(next_config) = self.find_config_by_name(&hook[1]) {
+                result.insert(hook[1].clone());
+                chain.push((hook[0].clone(), hook[1].clone()));
+                return self.recursive_check(&next_config, result, chain);
+            }
+            return false; //if hook child not exsit
         }
+        true //test fine
+    }
 
-        Ok(true)
+    // Get config prehook details, find them one by one make sure no circle inside
+    fn pre_hook_check(
+        &self,
+        name: &String,
+        start: &Config,
+    ) -> Result<(bool, Vec<(String, String)>)> {
+        let mut call_set = HashSet::new();
+        let mut call_chain = vec![]; // chain including (command, name)
+
+        //put this
+        call_set.insert(name.clone());
+
+        if self.recursive_check(start, &mut call_set, &mut call_chain) {
+            Ok((true, call_chain))
+        } else {
+            Ok((false, call_chain))
+        }
+    }
+
+    //generate call chain used by KG to handle prehooks
+    fn call_chain_combine(
+        &self,
+        call_chain: Vec<(String, String)>,
+    ) -> Result<Vec<(String, String, Config)>> {
+        let all_child = self.all_ymls_in_load_path()?;
+        let mut result = vec![];
+
+        for (comm, name) in call_chain {
+            if let Some(conf_path) = all_child.iter().find(|x| x.0 == name) {
+                if let Ok(conf) = Config::read_from_yaml_file(&conf_path.1) {
+                    result.push((comm, name, conf));
+                }
+            }
+        }
+        Ok(result)
     }
 }
 
@@ -374,10 +405,10 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
                                 sd_.send((first.to_string(), second.to_string())).unwrap();
                             } else {
                                 //if just normal error
-                                println!("{}", logger::timelog(e.description()));
+                                print!("{}", logger::timelog(e.description()));
                             }
                         }
-                        Ok(des) => println!("{}", logger::timelog(&des)),
+                        Ok(des) => print!("{}", logger::timelog(&des)),
                     }
                 });
             }
@@ -440,6 +471,23 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
             let mut conf = server_conf.find_config_by_name(name)?;
 
+            //check prehook here
+            let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
+            if !pre_hook_result.0 {
+                return Err(ioError::new(
+                    ErrorKind::Other,
+                    format!(
+                        "This child, {}, cannot pass recursive check\n",
+                        command.child_name.unwrap()
+                    ),
+                ));
+            } else {
+                let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
+                //reverse call chain
+                pre_hook_combine.reverse();
+                kg.handle_pre_hook(pre_hook_combine)?;
+            }
+
             match kg.restart(name, &mut conf) {
                 Ok(_) => {
                     //repeat here
@@ -482,7 +530,25 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ServerConfig::load(&kg.server_config_path)?
             };
 
+            //read this child's config
             let mut conf = server_conf.find_config_by_name(&name)?;
+
+            //check prehook here
+            let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
+            if !pre_hook_result.0 {
+                return Err(ioError::new(
+                    ErrorKind::Other,
+                    format!(
+                        "This child, {}, cannot pass recursive check\n",
+                        command.child_name.unwrap()
+                    ),
+                ));
+            } else {
+                let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
+                //reverse call chain
+                pre_hook_combine.reverse();
+                kg.handle_pre_hook(pre_hook_combine)?;
+            }
 
             match kg.start(name, &mut conf) {
                 Ok(_) => {
