@@ -207,6 +207,16 @@ impl Kindergarten {
         self.name_list.get(name)
     }
 
+    pub fn get_child_config(&mut self, name: &String) -> Option<Config> {
+        let id = if let Some(id) = self.has_child(name) {
+            id.clone()
+        } else {
+            return None;
+        };
+
+        Some(self.id_list.get(&id).as_ref().unwrap().1.clone())
+    }
+
     pub fn check_status(&mut self, name: &String) -> Result<String> {
         //first check_around
         self.check_around()?;

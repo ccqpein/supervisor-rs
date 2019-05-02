@@ -6,8 +6,11 @@
    - [X] should print log out
    - [X] test
 
-** TODO Triger feature of children
-   - [ ] child can has triger before/after some command run
+** TODO Triger feature of children [0%]
+   - [-] child can has triger before/after some command run [66%]
+     - [X] prehook
+     - [X] prehook check function
+     - [ ] posthook, in stop feature
    - [ ] hook behavior should be a legal child too
 
 ** TODO Change listen ip

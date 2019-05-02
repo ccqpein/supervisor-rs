@@ -565,15 +565,29 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             }
         }
 
-        client::Ops::Stop => match kg.stop(command.child_name.as_ref().unwrap()) {
-            Ok(_) => {
-                return Ok(format!(
-                    "stop {} success\n",
-                    command.child_name.as_ref().unwrap()
-                ));
+        client::Ops::Stop => {
+            let post_hook =
+                if let Some(conf) = kg.get_child_config(command.child_name.as_ref().unwrap()) {
+                    conf.get_hook(&String::from("posthook"))
+                } else {
+                    None
+                };
+
+            match kg.stop(command.child_name.as_ref().unwrap()) {
+                Ok(_) => {
+                    if let Some(post_hook_command) = post_hook {
+                        //:= TODO: need run post_hook here
+                        //day_care(kig, post_hook_command);
+                    }
+
+                    return Ok(format!(
+                        "stop {} success\n",
+                        command.child_name.as_ref().unwrap()
+                    ));
+                }
+                Err(e) => Err(e),
             }
-            Err(e) => Err(e),
-        },
+        }
 
         //try start will force start child:
         //if it is running, call restart.

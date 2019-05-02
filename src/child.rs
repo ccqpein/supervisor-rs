@@ -150,6 +150,23 @@ impl Config {
 
     pub fn get_hook(&self, key: &String) -> Option<String> {
         if self.has_hook() {
+            return Some(
+                *self
+                    .hooks
+                    .as_ref()
+                    .unwrap()
+                    .get(key)
+                    .as_ref()
+                    .unwrap()
+                    .clone(),
+            );
+        }
+
+        None
+    }
+
+    pub fn get_hook_command(&self, key: &String) -> Option<String> {
+        if self.has_hook() {
             return self.hooks.as_ref().unwrap().get_hook_command(key);
         }
 
