@@ -1,8 +1,7 @@
 use std::env;
 use std::error::Error;
 use std::io::prelude::*;
-use std::net::TcpStream;
-use std::net::{IpAddr, SocketAddr};
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
 use supervisor_rs::client::{Command, Ops};
 

@@ -151,14 +151,13 @@ impl Config {
     pub fn get_hook(&self, key: &String) -> Option<String> {
         if self.has_hook() {
             return Some(
-                *self
-                    .hooks
+                self.hooks
                     .as_ref()
                     .unwrap()
                     .get(key)
                     .as_ref()
                     .unwrap()
-                    .clone(),
+                    .to_string(),
             );
         }
 

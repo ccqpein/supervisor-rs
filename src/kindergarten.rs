@@ -57,8 +57,15 @@ impl Kindergarten {
 
     //start child
     //this function will start child without if child has been started or not.
-    //use self.has_child to check outside
     pub fn start(&mut self, name: &String, config: &mut Config) -> Result<()> {
+        //check inside again (because "start" in server has checked once) here...
+        //...because prehook need check too, but it does not check in server
+        if let Some(_) = self.has_child(name) {
+            return Err(ioError::new(
+                ErrorKind::InvalidData,
+                format!("Cannot start child {}, it already exist.", name),
+            ));
+        };
         //start new child
         match start_new_child(config) {
             Ok(child) => {

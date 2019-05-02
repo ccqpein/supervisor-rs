@@ -400,15 +400,15 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
                             //..first
                             let (first, second) = e.description().split_at(12);
                             if first == "I am dying. " {
-                                print!("{}", logger::timelog(second));
+                                println!("{}", logger::timelog(second));
                                 //tell main thread,
                                 sd_.send((first.to_string(), second.to_string())).unwrap();
                             } else {
                                 //if just normal error
-                                print!("{}", logger::timelog(e.description()));
+                                println!("{}", logger::timelog(e.description()));
                             }
                         }
-                        Ok(des) => print!("{}", logger::timelog(&des)),
+                        Ok(des) => println!("{}", logger::timelog(&des)),
                     }
                 });
             }
@@ -477,7 +477,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 return Err(ioError::new(
                     ErrorKind::Other,
                     format!(
-                        "This child, {}, cannot pass recursive check\n",
+                        "This child, {}, cannot pass pre-check",
                         command.child_name.unwrap()
                     ),
                 ));
@@ -498,7 +498,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                     };
 
                     Ok(format!(
-                        "restart {} success{}\n",
+                        "restart {} success{}",
                         command.child_name.as_ref().unwrap(),
                         repeat_meg,
                     ))
@@ -518,7 +518,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 return Err(ioError::new(
                     ErrorKind::Other,
                     format!(
-                        "Cannot start this child {}, it already exsits\n",
+                        "Cannot start this child {}, it already exsits",
                         command.child_name.unwrap()
                     ),
                 ));
@@ -535,19 +535,23 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
             //check prehook here
             let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
+            let mut pre_hook_msg = String::new();
             if !pre_hook_result.0 {
                 return Err(ioError::new(
                     ErrorKind::Other,
                     format!(
-                        "This child, {}, cannot pass recursive check\n",
+                        "This child, {}, cannot pass recursive check",
                         command.child_name.unwrap()
                     ),
                 ));
             } else {
                 let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
                 //reverse call chain
-                pre_hook_combine.reverse();
-                kg.handle_pre_hook(pre_hook_combine)?;
+                if pre_hook_combine.len() != 0 {
+                    pre_hook_combine.reverse();
+                    kg.handle_pre_hook(pre_hook_combine)?;
+                    pre_hook_msg.push_str("Find pre-hook, has started pre-hook firstly. ");
+                }
             }
 
             match kg.start(name, &mut conf) {
@@ -559,7 +563,12 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                         String::new()
                     };
 
-                    Ok(format!("start {} success{}\n", name.clone(), repeat_meg))
+                    Ok(format!(
+                        "{}start {} success{}",
+                        pre_hook_msg,
+                        name.clone(),
+                        repeat_meg
+                    ))
                 }
                 Err(e) => Err(e),
             }
@@ -576,12 +585,13 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             match kg.stop(command.child_name.as_ref().unwrap()) {
                 Ok(_) => {
                     if let Some(post_hook_command) = post_hook {
-                        //:= TODO: need run post_hook here
-                        //day_care(kig, post_hook_command);
+                        let mut stream = TcpStream::connect("127.0.0.1:33889")?;
+                        stream.write_all(post_hook_command.as_bytes())?;
+                        stream.flush()?;
                     }
 
                     return Ok(format!(
-                        "stop {} success\n",
+                        "stop {} success",
                         command.child_name.as_ref().unwrap()
                     ));
                 }
@@ -602,18 +612,33 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
             //check if it is running, stop it or not.
             if let Some(_) = kg.has_child(name) {
-                resp.push_str("this child already start, stop it first.\n");
+                resp.push_str("This child already start, stop it first. ");
+                let post_hook =
+                    if let Some(conf) = kg.get_child_config(command.child_name.as_ref().unwrap()) {
+                        conf.get_hook(&String::from("posthook"))
+                    } else {
+                        None
+                    };
                 match kg.stop(name) {
                     Ok(_) => {
+                        if let Some(post_hook_command) = post_hook {
+                            let mut stream = TcpStream::connect("127.0.0.1:33889")?;
+                            stream.write_all(post_hook_command.as_bytes())?;
+                            stream.flush()?;
+                            resp.push_str(&format!(
+                                "find post-hook \"{}\", run it after stop. ",
+                                post_hook_command
+                            ));
+                        }
                         resp.push_str(&format!(
-                            "stop {} success, start it again.\n",
+                            "Stop {} success, start it again. ",
                             command.child_name.as_ref().unwrap()
                         ));
                     }
                     Err(e) => {
                         return Err(ioError::new(
                             ErrorKind::InvalidData,
-                            format!("stop failed, error: {}\n", e.description()),
+                            format!("stop failed, error: {}", e.description()),
                         ));
                     }
                 }
@@ -628,12 +653,25 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
             let mut conf = server_conf.find_config_by_name(name)?;
 
-            match start_new_child(&mut conf) {
-                Ok(child_handle) => {
-                    let id = conf.child_id.unwrap();
-                    kg.register_id(id, child_handle, conf.clone());
-                    kg.register_name(command.child_name.as_ref().unwrap(), id);
+            //check prehook here
+            let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
+            if !pre_hook_result.0 {
+                return Err(ioError::new(
+                    ErrorKind::Other,
+                    format!(
+                        "This child, {}, cannot pass pre-check",
+                        command.child_name.unwrap()
+                    ),
+                ));
+            } else {
+                let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
+                //reverse call chain
+                pre_hook_combine.reverse();
+                kg.handle_pre_hook(pre_hook_combine)?;
+            }
 
+            match kg.start(name, &mut conf) {
+                Ok(_) => {
                     //repeat here
                     let repeat_meg = if conf.is_repeat() {
                         repeat(conf, Arc::clone(&kig), name.clone())
@@ -642,7 +680,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                     };
 
                     resp.push_str(&format!(
-                        "start {} success{}\n",
+                        "Start {} success{} ",
                         command.child_name.as_ref().unwrap(),
                         repeat_meg,
                     ));
@@ -657,16 +695,13 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             let mut last_will = String::new();
             // step1: stop all
             if let Err(e) = kg.stop(&"all".to_string()) {
-                last_will.push_str(&format!(
-                    "there is error when stop all {}\n",
-                    e.description()
-                ));
+                last_will.push_str(&format!("there is error when stop all {}", e.description()));
             }
 
             // step2: return special err outside, let deamon know and stop
             Err(ioError::new(
                 ErrorKind::Other,
-                format!("I am dying. last error: \n{}\n", last_will),
+                format!("I am dying. last error: \n{}", last_will),
             ))
         }
 
