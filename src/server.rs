@@ -383,7 +383,6 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 //keep taking care children
 pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, String)>) -> Result<()> {
     //start TCP listener to receive client commands
-    //:= TODO: should has ability to change listen ip
     let listener = TcpListener::bind(format!("{}:{}", "0.0.0.0", 33889))?;
 
     for stream in listener.incoming() {
