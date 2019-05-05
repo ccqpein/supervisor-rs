@@ -14,3 +14,4 @@
      - [X] posthook, in stop feature
    - [X] hook behavior should be a legal child too
 
+** TODO GUI?
