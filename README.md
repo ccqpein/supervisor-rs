@@ -148,6 +148,19 @@ This is because all `start`, `restart` and `trystart` will **reload** config of 
 
 So, what will supervisor do if child has `stopped`, or `restart` manually before timer finish its waiting and send command to supervisor again, timer isn't outdated? Timer will check if child has same processing id as when it created timer. If this check passed, timer will do its job as normal, else, timer won't do anything because child current is not child before.
 
+### Hooks feature ###
+
+Each child can have two hooks, one `prehook`, one `posthook`. `prehook` command will run before main child `start`/`restart`. `posthook` will run after child `stop`.
+
+example:
+
+```yaml
+command: sleep 10
+hooks:
+  - prehook: start child
+  - posthook: start child
+```
+
 ### What if accident happens ###
 
 * if supervisor-rs be killed by `kill`, children won't stop, they will be taken by system.

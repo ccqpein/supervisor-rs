@@ -154,17 +154,17 @@ impl ServerConfig {
     fn recursive_check(
         &self,
         start: &Config,
-        result: &mut HashSet<String>,
+        set: &mut HashSet<String>,
         chain: &mut Vec<(String, String)>,
     ) -> bool {
         if let Some(hook) = start.get_hook_detail(&String::from("prehook")) {
-            if result.contains(&hook[1]) {
+            if set.contains(&hook[1]) {
                 return false;
             }
             if let Ok(next_config) = self.find_config_by_name(&hook[1]) {
-                result.insert(hook[1].clone());
+                set.insert(hook[1].clone());
                 chain.push((hook[0].clone(), hook[1].clone()));
-                return self.recursive_check(&next_config, result, chain);
+                return self.recursive_check(&next_config, set, chain);
             }
             return false; //if hook child not exsit
         }
