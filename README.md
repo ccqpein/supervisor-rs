@@ -101,14 +101,16 @@ startup:
   - child3
 ```
 
-server will try to start `child1`, `child2`, and `child3` when 
+server will try to start `child1`, `child2`, and `child3` when it startup
 
 **QA:**
 
 Q: if child3 not exist?
+
 A: server will going to find children in `startup`, if some of them not exist in loadpaths, server will skip them.
 
 Q: what if I forget write mode to half?
+
 A: server default mode is quiet, and startup list only used in `half` mode, otherwise, `startup` won't effect anything.
 
 
