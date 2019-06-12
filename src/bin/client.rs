@@ -5,6 +5,11 @@ use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
 use supervisor_rs::client::{Command, Ops};
 
+const CANNOT_REACH_SERVER_ERROR: &'static str =
+    "\nLooks like client cannot reach server side, make sure you start supervisor-rs-server on host you want to reach. \
+Maybe it is network problem, or even worse, server app terminated. \
+If server app terminated, all children were running become zombies. Check them out.";
+
 fn main() {
     let arguments = env::args();
     let change_2_vec = arguments.collect::<Vec<String>>();
@@ -47,7 +52,7 @@ fn main() {
         match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
             Ok(s) => s,
             Err(e) => {
-                println!("error: {}", e.description());
+                println!("error: {}; {}", e.description(), CANNOT_REACH_SERVER_ERROR);
                 return;
             }
         }
@@ -57,7 +62,7 @@ fn main() {
         match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
             Ok(s) => s,
             Err(e) => {
-                println!("error: {}", e.description());
+                println!("error: {}; {}", e.description(), CANNOT_REACH_SERVER_ERROR);
                 return;
             }
         }
