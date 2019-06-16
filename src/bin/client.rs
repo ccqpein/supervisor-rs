@@ -21,51 +21,75 @@ fn main() {
         }
     };
 
+    //println!("this is command {:?}", cache_command);
+
     if let Ops::Help = cache_command.op {
         println!("{}", help());
         return;
     }
 
     //build stream
-    let mut stream = if let Some(_) = cache_command.prep {
+    let streams: Vec<TcpStream> = if let Some(_) = cache_command.prep {
         //parse ip address
         //only accept ip address
-        let addr = if let Some(des) = cache_command.obj {
-            match des.parse::<IpAddr>() {
-                Ok(ad) => ad,
-                Err(e) => {
-                    println!(
-                        "something wrong when parse des ip address: {}, use 127.0.0.1 instead",
-                        e
-                    );
-                    "127.0.0.1".parse::<IpAddr>().unwrap()
-                }
+        let addrs: Vec<IpAddr> = if let Some(des) = cache_command.obj {
+            let addresses = des
+                .split(|x| x == ',' || x == ' ')
+                .filter(|x| *x != "")
+                .collect::<Vec<&str>>();
+
+            let mut result: Vec<IpAddr> = vec![];
+            for a in addresses {
+                match a.parse::<IpAddr>() {
+                    Ok(ad) => result.push(ad),
+                    Err(e) => {
+                        println!("something wrong when parse des ip address {}: {}", a, e);
+                        return;
+                    }
+                };
             }
+            result
         } else {
             println!("there is no destination, send to local");
             //if no obj, give local address
-            "127.0.0.1".parse::<IpAddr>().unwrap()
+            vec!["127.0.0.1".parse::<IpAddr>().unwrap()]
         };
 
+        //dbg!(&addrs);
         //creat socket
-        let sock = SocketAddr::new(addr, 33889);
-        match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
-            Ok(s) => s,
-            Err(e) => {
-                println!("error: {}; {}", e.description(), CANNOT_REACH_SERVER_ERROR);
-                return;
-            }
+        let mut _streams: Vec<TcpStream> = vec![];
+        for addr in addrs {
+            let sock = SocketAddr::new(addr, 33889);
+            match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
+                Ok(s) => _streams.push(s),
+                Err(e) => {
+                    println!(
+                        "error of {}: {}; {}",
+                        addr,
+                        e.description(),
+                        CANNOT_REACH_SERVER_ERROR
+                    );
+                    return;
+                }
+            };
         }
+        _streams
     } else {
         //if don't have prep, give local address
+        let mut _streams: Vec<TcpStream> = vec![];
         let sock = SocketAddr::new("127.0.0.1".parse::<IpAddr>().unwrap(), 33889);
         match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
-            Ok(s) => s,
+            Ok(s) => _streams.push(s),
             Err(e) => {
-                println!("error: {}; {}", e.description(), CANNOT_REACH_SERVER_ERROR);
+                println!(
+                    "error of 127.0.0.1: {}; {}",
+                    e.description(),
+                    CANNOT_REACH_SERVER_ERROR
+                );
                 return;
             }
         }
+        _streams
     };
 
     let data_2_server = format!(
@@ -74,23 +98,25 @@ fn main() {
         cache_command.child_name.unwrap_or(String::new())
     );
 
-    //println!("{:?}", data_2_server);
-    if let Err(e) = stream.write_all(data_2_server.as_bytes()) {
-        println!("error: {}", e.description());
-        return;
-    };
+    for mut stream in streams {
+        //println!("{:?}", data_2_server);
+        if let Err(e) = stream.write_all(data_2_server.as_bytes()) {
+            println!("error: {}", e.description());
+            return;
+        };
 
-    if let Err(e) = stream.flush() {
-        println!("error: {}", e.description());
-        return;
-    };
+        if let Err(e) = stream.flush() {
+            println!("error: {}", e.description());
+            return;
+        };
 
-    let mut response = String::new();
-    if let Err(e) = stream.read_to_string(&mut response) {
-        println!("error: {}", e.description());
-        return;
-    };
-    print!("{}", response);
+        let mut response = String::new();
+        if let Err(e) = stream.read_to_string(&mut response) {
+            println!("error: {}", e.description());
+            return;
+        };
+        print!("{}", response);
+    }
 }
 
 fn help() -> String {
