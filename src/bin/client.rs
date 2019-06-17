@@ -28,7 +28,7 @@ fn main() {
         return;
     }
 
-    //build stream
+    //build streams
     let streams: Vec<TcpStream> = if let Some(_) = cache_command.prep {
         //parse ip address
         //only accept ip address
@@ -98,6 +98,7 @@ fn main() {
         cache_command.child_name.unwrap_or(String::new())
     );
 
+    //send same commands to all servers
     for mut stream in streams {
         //println!("{:?}", data_2_server);
         if let Err(e) = stream.write_all(data_2_server.as_bytes()) {
