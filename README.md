@@ -71,6 +71,8 @@ run server with special config file:
 
 `supervisor-rs-client restart child0 on 198.0.0.2` will restart processing `child0` on `192.0.0.2`, I assume you running server side application on this host;
 
+`supervisor-rs-client restart child0 on "198.0.0.2, 198.0.0.3"` will restart processing `child0` on `192.0.0.2` and `192.0.0.3`, I assume you running server side application on this host;
+
 child name is not must for `check`/`kill` commands.
 
 commands:
