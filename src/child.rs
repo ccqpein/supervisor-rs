@@ -22,6 +22,7 @@ pub struct Config {
     pub child_id: Option<u32>,
     repeat: Option<Repeat>,
     hooks: Option<Hooks>,
+    //:= TODO: start time here
 }
 
 impl Config {
@@ -197,8 +198,13 @@ impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "  command is: {}\n  stdout is: {:?}\n  stderr is: {:?}\n  child id is: {:?}\n  repeat is: {:?}",
-            self.comm, self.stdout, self.stderr, self.child_id, self.repeat)
+            "  command is: {}\n  stdout is: {}\n  stderr is: {}\n  child id is: {}\n  repeat is: {}",
+            self.comm,
+            self.stdout.as_ref().unwrap_or(&Output::new_empty()),
+            self.stderr.as_ref().unwrap_or(&Output::new_empty()),
+            self.child_id.as_ref().unwrap_or(&(0 as u32)),
+            self.repeat.as_ref().unwrap_or(&Repeat::new_empty())
+        )
     }
 }
 
@@ -208,7 +214,7 @@ mod tests {
     use super::super::server::start_new_child;
     use super::*;
 
-    #[test]
+    //#[test]
     fn command_argvs() {
         let con = dbg!(Config::read_from_yaml_file("./test/argv.yml")).unwrap();
         let (comm, argvs) = con.split_args();
@@ -219,14 +225,14 @@ mod tests {
         println!("{:?}", argvs.unwrap().split(' ').collect::<Vec<&str>>());
     }
 
-    #[test]
+    //#[test]
     fn run_ls() {
         let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml")).unwrap();
 
         let _ = dbg!(start_new_child(&mut con));
     }
 
-    #[test]
+    //#[test]
     fn read_hooks() {
         let input0 = "
 command: test
@@ -243,6 +249,26 @@ hooks:
 ";
 
         println!("read_hooks 1: {:?}", Config::read_from_str(input1));
+    }
+
+    #[test]
+    fn test_printout_config() {
+        let input0 = "
+command: test
+output:
+  - stdout: aaaaaa
+    mode: create
+hooks:
+  - prehook: start child1
+  - posthook: start child2
+  - posthook: start child3
+repeat:
+  action: restart
+  seconds: 5
+";
+        let conf = Config::read_from_str(input0).unwrap();
+
+        println!("{}", conf);
     }
 
 }

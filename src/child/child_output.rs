@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::{Error as ioError, ErrorKind, Result};
 use yaml_rust::Yaml;
 
@@ -14,6 +15,13 @@ pub struct Output {
 }
 
 impl Output {
+    pub fn new_empty() -> Self {
+        Output {
+            path: String::new(),
+            mode: OutputMode::Create,
+        }
+    }
+
     pub fn new(input: Yaml) -> Result<Vec<(String, Self)>> {
         let lst = match input.into_vec() {
             Some(lst) => lst,
@@ -78,5 +86,23 @@ impl Output {
         }
 
         Ok(result)
+    }
+}
+
+impl fmt::Display for Output {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.path == "" {
+            return write!(f, "none");
+        }
+        write!(f, "path: {}, mode: {}", self.path, self.mode)
+    }
+}
+
+impl fmt::Display for OutputMode {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Create => write!(f, "{}", "create"),
+            Append => write!(f, "{}", "append"),
+        }
     }
 }

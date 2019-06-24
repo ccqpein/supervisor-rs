@@ -63,7 +63,6 @@ impl Hooks {
         None
     }
 
-    //:= TODO: need test
     pub fn get_hook_command(&self, key: &String) -> Option<String> {
         if let Some(hook) = self.get_hook_detail(key) {
             return Some(hook[0].clone());
@@ -79,6 +78,9 @@ impl Clone for Hooks {
         }
     }
 }
+
+//:= TODO:
+//impl fmt::Display for Hooks {}
 
 #[cfg(test)]
 mod tests {

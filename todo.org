@@ -1,17 +1,5 @@
 * LIST 
 
-** DONE Server side shoud has ability to start several children at startup [3/3]
-   CLOSED: [2019-04-24 Wed 11:14]
-   - [X] maybe put these children in config
-   - [X] should print log out
-   - [X] test
-
-** DONE Triger feature of children [100%]
-   CLOSED: [2019-05-03 Fri 08:22]
-   - [X] child can has triger before/after some command run [100%]
-     - [X] prehook
-     - [X] prehook check function
-     - [X] posthook, in stop feature
-   - [X] hook behavior should be a legal child too
-
-** TODO GUI?
+** TODO More details in check [0/2]
+   - [ ] start time
+   - [ ] hooks (if it has)

@@ -1,3 +1,4 @@
+use std::fmt;
 use std::io::{Error as ioError, ErrorKind, Result};
 use yaml_rust::Yaml;
 
@@ -8,6 +9,13 @@ pub struct Repeat {
 }
 
 impl Repeat {
+    pub fn new_empty() -> Self {
+        Repeat {
+            action: String::from(""),
+            seconds: 0,
+        }
+    }
+
     pub fn new(input: &Yaml) -> Result<Self> {
         let mut result = Repeat {
             action: String::from("restart"),
@@ -48,6 +56,20 @@ impl Repeat {
                 ErrorKind::InvalidData,
                 format!("seconds cannot less or equal 0"),
             ))
+        }
+    }
+}
+
+impl fmt::Display for Repeat {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.seconds == 0 {
+            write!(f, "false")
+        } else {
+            write!(
+                f,
+                "action is {}, interval is {} seconds",
+                self.action, self.seconds
+            )
         }
     }
 }
