@@ -13,6 +13,7 @@ use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
 use std::sync::mpsc::Sender;
 use std::thread;
+use std::time;
 use yaml_rust::YamlLoader;
 
 use std::sync::{Arc, Mutex};
@@ -262,6 +263,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     match child {
         Ok(ref c) => {
             config.child_id = Some(c.id());
+            config.start_time = Some(time::Instant::now());
             //:= TODO: give start time here
             return child;
         }

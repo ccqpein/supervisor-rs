@@ -23,6 +23,7 @@ pub struct Config {
     repeat: Option<Repeat>,
     hooks: Option<Hooks>,
     //:= TODO: start time here
+    pub start_time: Option<time::Instant>,
 }
 
 impl Config {
@@ -34,6 +35,7 @@ impl Config {
             child_id: None,
             repeat: None,
             hooks: None,
+            start_time: None,
         }
     }
 
@@ -190,6 +192,7 @@ impl Clone for Config {
             child_id: self.child_id,
             repeat: self.repeat.clone(),
             hooks: self.hooks.clone(),
+            start_time: self.start_time.clone(),
         }
     }
 }
