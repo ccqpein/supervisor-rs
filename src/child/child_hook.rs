@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::fmt;
 use std::io::{Error as ioError, ErrorKind, Result};
 
 use yaml_rust::Yaml;
@@ -13,6 +14,12 @@ pub struct Hooks {
 //  - posthook: start child2
 
 impl Hooks {
+    pub fn new_empty() -> Self {
+        Hooks {
+            hook_table: HashMap::new(),
+        }
+    }
+
     pub fn new(input: &Yaml) -> Result<Self> {
         let hooks = match input.as_vec() {
             Some(hooks) => hooks,
@@ -79,8 +86,19 @@ impl Clone for Hooks {
     }
 }
 
-//:= TODO:
-//impl fmt::Display for Hooks {}
+impl fmt::Display for Hooks {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.hook_table.is_empty() {
+            return write!(f, "none");
+        }
+
+        for (key, val) in self.hook_table.iter() {
+            let _ = write!(f, "    {}: {}\n", key, val);
+        }
+
+        Ok(())
+    }
+}
 
 #[cfg(test)]
 mod tests {
@@ -99,7 +117,7 @@ hooks:
         )
         .unwrap();
 
-        println!("{:#?}", Hooks::new(&test0[0]["hooks"]));
+        println!("{}", Hooks::new(&test0[0]["hooks"]).unwrap());
 
         let test1 = YamlLoader::load_from_str(
             "

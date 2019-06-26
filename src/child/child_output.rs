@@ -101,8 +101,8 @@ impl fmt::Display for Output {
 impl fmt::Display for OutputMode {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Create => write!(f, "{}", "create"),
-            Append => write!(f, "{}", "append"),
+            OutputMode::Create => write!(f, "{}", "create"),
+            OutputMode::Append => write!(f, "{}", "append"),
         }
     }
 }

@@ -3,6 +3,7 @@ pub mod child_output;
 mod child_repeat;
 
 use super::logger;
+use chrono::prelude::*;
 use std::error::Error;
 use std::fmt;
 use std::fs::File;
@@ -19,11 +20,11 @@ pub struct Config {
     comm: String,
     pub stdout: Option<Output>,
     pub stderr: Option<Output>,
-    pub child_id: Option<u32>,
     repeat: Option<Repeat>,
     hooks: Option<Hooks>,
-    //:= TODO: start time here
-    pub start_time: Option<time::Instant>,
+
+    pub child_id: Option<u32>,
+    pub start_time: Option<DateTime<Local>>,
 }
 
 impl Config {
@@ -201,12 +202,19 @@ impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "  command is: {}\n  stdout is: {}\n  stderr is: {}\n  child id is: {}\n  repeat is: {}",
+            "  command is: {}\n  stdout is: {}\n  stderr is: {}\n  child id is: {}\n  start time: {:?}\n  repeat is: {}\n  hooks are:\n{}",
             self.comm,
             self.stdout.as_ref().unwrap_or(&Output::new_empty()),
             self.stderr.as_ref().unwrap_or(&Output::new_empty()),
             self.child_id.as_ref().unwrap_or(&(0 as u32)),
-            self.repeat.as_ref().unwrap_or(&Repeat::new_empty())
+            {if let Some(t) = self.start_time{
+                t.format("%Y-%m-%d %H:%M:%S").to_string()
+            }else {
+                String::from("none")
+            }},
+            //Local::now().format("%Y-%m-%d %H:%M:%S").to_string(),
+            self.repeat.as_ref().unwrap_or(&Repeat::new_empty()),
+            self.hooks.as_ref().unwrap_or(&Hooks::new_empty())
         )
     }
 }
@@ -260,7 +268,7 @@ hooks:
 command: test
 output:
   - stdout: aaaaaa
-    mode: create
+    mode: append
 hooks:
   - prehook: start child1
   - posthook: start child2
@@ -271,7 +279,7 @@ repeat:
 ";
         let conf = Config::read_from_str(input0).unwrap();
 
-        println!("{}", conf);
+        println!("whole config is:\n{}", conf);
     }
 
 }
