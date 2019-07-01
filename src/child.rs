@@ -270,9 +270,9 @@ output:
   - stdout: aaaaaa
     mode: append
 hooks:
-  - prehook: start child1
-  - posthook: start child2
-  - posthook: start child3
+#  - prehook: start child1
+#  - posthook: start child2
+#  - posthook: start child3
 repeat:
   action: restart
   seconds: 5

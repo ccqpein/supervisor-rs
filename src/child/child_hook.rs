@@ -89,7 +89,7 @@ impl Clone for Hooks {
 impl fmt::Display for Hooks {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         if self.hook_table.is_empty() {
-            return write!(f, "none");
+            return write!(f, "    none");
         }
 
         for (key, val) in self.hook_table.iter() {
