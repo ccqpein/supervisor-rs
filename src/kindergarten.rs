@@ -170,7 +170,7 @@ impl Kindergarten {
             return Err(ioError::new(
                 ErrorKind::InvalidData,
                 format!(
-                    "mumber of name_list not match id_list, something wrong: \n{:#?}\n{:#?}",
+                    "number of name_list not match id_list, something wrong: \n{:#?}\n{:#?}",
                     self.name_list, self.id_list
                 ),
             ));
