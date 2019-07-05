@@ -158,6 +158,8 @@ So, what will supervisor do if child has `stopped`, or `restart` manually before
 
 Each child can have two hooks, one `prehook`, one `posthook`. `prehook` command will run before main child `start`/`restart`. `posthook` will run after child `stop`.
 
+If prehooks command child has anther prehook, means there is a prehooks chain, they will run one by one, and they cannot have hooks circle.
+
 example:
 
 ```yaml
