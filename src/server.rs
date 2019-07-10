@@ -433,11 +433,11 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
 
     match day_care(kig, received_comm) {
         Ok(resp) => {
-            stream.write_all(format!("server response: \n{}", resp).as_bytes())?;
+            stream.write_all(resp.as_bytes())?;
             Ok(resp)
         }
         Err(e) => {
-            stream.write_all(format!("server response error: \n{}", e.description()).as_bytes())?;
+            stream.write_all(e.description().as_bytes())?;
             Err(e)
         }
     }

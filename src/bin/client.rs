@@ -100,23 +100,29 @@ fn main() {
 
     //send same commands to all servers
     for mut stream in streams {
-        //println!("{:?}", data_2_server);
+        let address = if let Ok(ad) = stream.peer_addr() {
+            ad.to_string()
+        } else {
+            String::from("Unknow address")
+        };
+
         if let Err(e) = stream.write_all(data_2_server.as_bytes()) {
-            println!("error: {}", e.description());
+            println!("Error from {}:\n {}", address, e.description());
             return;
         };
 
         if let Err(e) = stream.flush() {
-            println!("error: {}", e.description());
+            println!("Error from {}:\n {}", address, e.description());
             return;
         };
 
         let mut response = String::new();
         if let Err(e) = stream.read_to_string(&mut response) {
-            println!("error: {}", e.description());
+            println!("Error from {}:\n {}", address, e.description());
             return;
         };
-        print!("{}", response);
+
+        print!("Server {} response:\n{}", address, response);
     }
 }
 
