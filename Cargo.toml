@@ -5,6 +5,7 @@ authors = ["ccQpein <https://github.com/ccqpein>"]
 edition = "2018"
 description = "Manage (Start/Stop/Restart/etc.) processings on server."
 license = "MIT"
+repository = "https://github.com/ccqpein/supervisor-rs"
 readme = "README.md"
 
 [dependencies]
