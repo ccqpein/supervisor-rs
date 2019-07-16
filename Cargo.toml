@@ -3,6 +3,8 @@ name = "supervisor-rs"
 version = "0.5.6"
 authors = ["ccQpein"]
 edition = "2018"
+description = "Manage (Start/Stop/Restart/etc.) processings on server."
+license = "MIT"
 
 [dependencies]
 yaml-rust = "0.4"
