@@ -1,4 +1,4 @@
-# README #
+# supervisor-rs #
 
 `supervisor-rs` used to be a manager of handle application running. `supervisor-rs` can start/restart/stop processing.
 
@@ -65,7 +65,7 @@ run server with special config file:
 
 ### Client Side ###
 
-*Restart child processing*:
+**Restart child processing**:
 
 `supervisor-rs-client restart child0 on localhost` will restart processing `child0` on localhost;
 
