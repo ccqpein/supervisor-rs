@@ -13,7 +13,7 @@
 **design**:
 
 1. server/client mode
-2. server start -> load config files from loadpahts (if it is not quiet mode) -> do job
+2. server start -> load config files from loadpaths (if it is not quiet mode) -> do job
 3. start/stop/restart/tryrestart special processing (client side)
 
 **config yaml file format**:
