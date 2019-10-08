@@ -48,6 +48,8 @@ You can download compiled binary file directly on release tag.
 
 Or there is a tiny install script `install.sh`. You may need `root` permission to install it. After install, it would be neat if you give soft link `/usr/bin/supervisor-rs-client -> /usr/bin/supervisor-rs/supervisor-rs-client`, and `/usr/bin/supervisor-rs-server -> /usr/bin/supervisor-rs/supervisor-rs-server`
 
+Or you can install from cargo.io, run `cargo install supervisor-rs`.
+
 ### Server Side ###
 
 Start server side application. After compiled, run `supervisor-rs-server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config path given, supervisor will going to find `server.yml` in `/tmp`.
