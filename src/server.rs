@@ -24,6 +24,9 @@ struct ServerConfig {
     load_paths: Vec<String>,
     mode: String,
     startup_list: Option<Vec<String>>,
+
+    // client public keys location
+    keys_path: Option<Vec<String>>,
 }
 
 impl ServerConfig {
@@ -43,11 +46,15 @@ impl ServerConfig {
             //quiet mode is default value now
             mode: "quiet".to_string(),
             startup_list: None,
+
+            keys_path: None,
         };
 
         match temp {
             Ok(docs) => {
                 let doc = &docs[0];
+
+                // load path parse
                 let paths = match doc["loadpaths"].as_vec() {
                     Some(v) => v
                         .iter()
@@ -57,12 +64,14 @@ impl ServerConfig {
                 };
                 result.load_paths = paths;
 
+                // mode parse
                 let mode = match doc["mode"].as_str() {
                     Some(v) => v.to_string(),
                     None => return Ok(result),
                 };
                 result.mode = mode;
 
+                // startup parse
                 let startup_children = match doc["startup"].as_vec() {
                     Some(v) => v
                         .iter()
@@ -71,6 +80,16 @@ impl ServerConfig {
                     None => return Ok(result),
                 };
                 result.startup_list = Some(startup_children);
+
+                // keys path parse
+                let keys_paths = match doc["pub_keys_path"].as_vec() {
+                    Some(v) => v
+                        .iter()
+                        .map(|x| x.clone().into_string().unwrap())
+                        .collect::<Vec<String>>(),
+                    None => return Ok(result),
+                };
+                result.keys_path = Some(keys_paths);
             }
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
         }
@@ -425,6 +444,8 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
 fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
     let mut buf = [0; 100];
     stream.read(&mut buf)?;
+
+    //:= key parse here
 
     let mut buf_vec = buf.to_vec();
     buf_vec.retain(|&x| x != 0);
