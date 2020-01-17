@@ -29,52 +29,60 @@ fn main() {
     }
 
     //build streams
-    let streams: Vec<TcpStream> = if let Some(_) = cache_command.prep {
-        //parse ip address
-        //only accept ip address
-        let addrs: Vec<IpAddr> = if let Some(des) = cache_command.obj {
-            let addresses = des
-                .split(|x| x == ',' || x == ' ')
-                .filter(|x| *x != "")
-                .collect::<Vec<&str>>();
+    let mut streams: Vec<TcpStream> = {
+        if let Some(pairs) = cache_command.prep_obj_pairs() {
+            //parse ip address
+            //only accept ip address
+            let ip_pair = pairs.iter().filter(|x| x.0.is_on());
+            let addrs: Vec<IpAddr> = {
+                let addresses = ip_pair
+                    .map(|des| {
+                        des.1
+                            .split(|x| x == ',' || x == ' ')
+                            .filter(|x| *x != "")
+                            .collect::<Vec<&str>>()
+                    })
+                    .flatten()
+                    .collect::<Vec<&str>>();
 
-            let mut result: Vec<IpAddr> = vec![];
-            for a in addresses {
-                match a.parse::<IpAddr>() {
-                    Ok(ad) => result.push(ad),
+                let mut result: Vec<IpAddr> = vec![];
+                for a in addresses {
+                    match a.parse::<IpAddr>() {
+                        Ok(ad) => result.push(ad),
+                        Err(e) => {
+                            println!("something wrong when parse des ip address {}: {}", a, e);
+                            return;
+                        }
+                    };
+                }
+                result
+            };
+
+            //dbg!(&addrs);
+            //creat socket
+            let mut _streams: Vec<TcpStream> = vec![];
+            for addr in addrs {
+                let sock = SocketAddr::new(addr, 33889);
+                match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
+                    Ok(s) => _streams.push(s),
                     Err(e) => {
-                        println!("something wrong when parse des ip address {}: {}", a, e);
+                        println!(
+                            "error of {}: {}; {}",
+                            addr,
+                            e.description(),
+                            CANNOT_REACH_SERVER_ERROR
+                        );
                         return;
                     }
                 };
             }
-            result
+            _streams
         } else {
-            println!("there is no destination, send to local");
-            //if no obj, give local address
-            vec!["127.0.0.1".parse::<IpAddr>().unwrap()]
-        };
-
-        //dbg!(&addrs);
-        //creat socket
-        let mut _streams: Vec<TcpStream> = vec![];
-        for addr in addrs {
-            let sock = SocketAddr::new(addr, 33889);
-            match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
-                Ok(s) => _streams.push(s),
-                Err(e) => {
-                    println!(
-                        "error of {}: {}; {}",
-                        addr,
-                        e.description(),
-                        CANNOT_REACH_SERVER_ERROR
-                    );
-                    return;
-                }
-            };
+            vec![]
         }
-        _streams
-    } else {
+    };
+
+    if streams.len() == 0 {
         //if don't have prep, give local address
         let mut _streams: Vec<TcpStream> = vec![];
         let sock = SocketAddr::new("127.0.0.1".parse::<IpAddr>().unwrap(), 33889);
@@ -89,8 +97,8 @@ fn main() {
                 return;
             }
         }
-        _streams
-    };
+        streams = _streams
+    }
 
     let data_2_server = format!(
         "{} {}",
