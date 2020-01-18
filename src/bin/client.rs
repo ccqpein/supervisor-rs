@@ -100,6 +100,7 @@ fn main() {
         streams = _streams
     }
 
+    //:= TODO: here to make encrypt data
     let data_2_server = format!(
         "{} {}",
         cache_command.op.to_string(),
@@ -156,4 +157,40 @@ more detail:
 https://github.com/ccqpein/supervisor-rs#usage
 ",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use supervisor_rs::client::*;
+
+    #[test]
+    fn ip_address_parse() {
+        let cache_command = Command {
+            op: Ops::Restart,
+            child_name: Some("child".to_string()),
+            prep: Some(vec![Prepositions::On, Prepositions::On]),
+            obj: Some(vec![
+                "192.168.1.1, 192.168.1.2".to_string(),
+                "192.168.1.3".to_string(),
+            ]),
+        };
+
+        let pairs = cache_command.prep_obj_pairs().unwrap();
+        let ip_pair = pairs.iter().filter(|x| x.0.is_on());
+        let addrs: Vec<&str> = {
+            let addresses = ip_pair
+                .map(|des| {
+                    des.1
+                        .split(|x| x == ',' || x == ' ')
+                        .filter(|x| *x != "")
+                        .collect::<Vec<&str>>()
+                })
+                .flatten()
+                .collect::<Vec<&str>>();
+            addresses
+        };
+
+        assert_eq!(addrs, ["192.168.1.1", "192.168.1.2", "192.168.1.3"])
+    }
 }

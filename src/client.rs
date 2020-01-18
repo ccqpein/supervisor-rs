@@ -208,21 +208,27 @@ mod tests {
         );
     }
 
-    #[test] //:= TEST: not yet
+    #[test]
     fn check_parser() {
-        let mut case0 = vec!["restart", "child", "with", "key", "on", "host"];
+        let mut case0 = vec![
+            "restart", "child", "with", "key", "on", "host", "on", "host1",
+        ];
         assert_eq!(
             Command {
                 op: Ops::Restart,
                 child_name: Some("child".to_string()),
-                prep: Some(vec![Prepositions::With, Prepositions::On]),
-                obj: Some(vec!["key".to_string(), "host".to_string()]),
+                prep: Some(vec![Prepositions::With, Prepositions::On, Prepositions::On]),
+                obj: Some(vec![
+                    "key".to_string(),
+                    "host".to_string(),
+                    "host1".to_string()
+                ]),
             },
             Command::new_from_str(case0).unwrap()
         );
     }
 
-    #[test] //:= TEST: not yet
+    #[test]
     fn check_make_pairs() {
         let case0 = Command {
             op: Ops::Restart,

@@ -442,10 +442,10 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
 
 //get client TCP stream and send to channel
 fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
-    let mut buf = [0; 100];
+    let mut buf = [0; 100]; //:= TODO: need change length
     stream.read(&mut buf)?;
 
-    //:= key parse here
+    //:= TODO: here to decrypt data
 
     let mut buf_vec = buf.to_vec();
     buf_vec.retain(|&x| x != 0);

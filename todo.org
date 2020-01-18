@@ -1,5 +1,6 @@
 * LIST 
 
-** TODO More details in check [0/2]
-   - [ ] start time
-   - [ ] hooks (if it has)
+** New features
+   - prep obj pairs (done)
+   - on several hosts (done)
+
