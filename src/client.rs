@@ -1,6 +1,8 @@
+use super::keys_handler::DataWrapper;
 use std::io::{Error, ErrorKind, Result};
+use std::str;
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Ops {
     Restart,
     Stop,
@@ -90,11 +92,19 @@ impl Prepositions {
             false
         }
     }
+
+    fn is_with(&self) -> bool {
+        if *self == Self::With {
+            true
+        } else {
+            false
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
 pub struct Command {
-    pub op: Ops,
+    op: Ops,
     pub child_name: Option<String>,
     pub prep: Option<Vec<Prepositions>>,
     pub obj: Option<Vec<String>>,
@@ -174,6 +184,10 @@ impl Command {
         Ok(re)
     }
 
+    pub fn get_ops(&self) -> Ops {
+        self.op.clone()
+    }
+
     pub fn prep_obj_pairs(&self) -> Option<Vec<(&Prepositions, &String)>> {
         if self.prep.is_none()
             || self.prep.as_ref().unwrap().len() != self.obj.as_ref().unwrap().len()
@@ -189,6 +203,60 @@ impl Command {
                 .zip(self.obj.as_ref().unwrap().iter())
                 .collect(),
         )
+    }
+
+    //:= TODO: need test
+    pub fn generate_encrypt_wapper(&self) -> Result<DataWrapper> {
+        if self.prep.is_none() {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                "no key argument flag input",
+            ));
+        }
+
+        if let Some(p) = self.prep.as_ref().unwrap().iter().position(|s| s.is_with()) {
+            let keyname = if let Some(objs) = &self.obj {
+                if let Some(f) = objs.get(p) {
+                    f
+                } else {
+                    return Err(Error::new(
+                        ErrorKind::NotFound,
+                        "no key name argument flag input",
+                    ));
+                }
+            } else {
+                return Err(Error::new(
+                    ErrorKind::NotFound,
+                    "no key name argument flag input",
+                ));
+            };
+
+            Ok(DataWrapper::new(
+                &keyname,
+                str::from_utf8(&self.as_bytes()).unwrap(),
+            ))
+        } else {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                "no key argument flag input",
+            ));
+        }
+    }
+
+    // ops + ' ' + childname
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let mut cache = self.op.to_string().as_bytes().to_vec();
+        cache.push(b' ');
+        cache.append(
+            &mut self
+                .child_name
+                .as_ref()
+                .unwrap_or(&String::new())
+                .as_bytes()
+                .to_vec(),
+        );
+
+        cache.clone()
     }
 }
 

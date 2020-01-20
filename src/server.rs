@@ -442,13 +442,13 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
 
 //get client TCP stream and send to channel
 fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
-    let mut buf = [0; 100]; //:= TODO: need change length
+    let mut buf = [0; 100 + 4096]; //:= DOC: need to write in doc
     stream.read(&mut buf)?;
-
-    //:= TODO: here to decrypt data
 
     let mut buf_vec = buf.to_vec();
     buf_vec.retain(|&x| x != 0);
+
+    //:= TODO: here to decrypt data
 
     let received_comm = String::from_utf8(buf_vec).unwrap();
 
@@ -477,7 +477,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
     let command = client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())?;
 
-    match command.op {
+    match command.get_ops() {
         client::Ops::Restart => {
             let name = command.child_name.as_ref().unwrap();
             //check name

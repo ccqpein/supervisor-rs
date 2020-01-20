@@ -23,12 +23,12 @@ fn main() {
 
     //println!("this is command {:?}", cache_command);
 
-    if let Ops::Help = cache_command.op {
+    if let Ops::Help = cache_command.get_ops() {
         println!("{}", help());
         return;
     }
 
-    //build streams
+    // build streams, parse all host
     let mut streams: Vec<TcpStream> = {
         if let Some(pairs) = cache_command.prep_obj_pairs() {
             //parse ip address
@@ -101,11 +101,11 @@ fn main() {
     }
 
     //:= TODO: here to make encrypt data
-    let data_2_server = format!(
-        "{} {}",
-        cache_command.op.to_string(),
-        cache_command.child_name.unwrap_or(String::new())
-    );
+    let data_2_server = if let Ok(d) = cache_command.generate_encrypt_wapper() {
+        d.encrypt_to_bytes().unwrap()
+    } else {
+        cache_command.as_bytes()
+    };
 
     //send same commands to all servers
     for mut stream in streams {
@@ -115,7 +115,7 @@ fn main() {
             String::from("Unknow address")
         };
 
-        if let Err(e) = stream.write_all(data_2_server.as_bytes()) {
+        if let Err(e) = stream.write_all(&data_2_server) {
             println!("Error from {}:\n {}", address, e.description());
             return;
         };
@@ -166,15 +166,13 @@ mod tests {
 
     #[test]
     fn ip_address_parse() {
-        let cache_command = Command {
-            op: Ops::Restart,
-            child_name: Some("child".to_string()),
-            prep: Some(vec![Prepositions::On, Prepositions::On]),
-            obj: Some(vec![
-                "192.168.1.1, 192.168.1.2".to_string(),
-                "192.168.1.3".to_string(),
-            ]),
-        };
+        let mut cache_command = Command::new(Ops::Restart);
+        cache_command.child_name = Some("child".to_string());
+        cache_command.prep = Some(vec![Prepositions::On, Prepositions::On]);
+        cache_command.obj = Some(vec![
+            "192.168.1.1, 192.168.1.2".to_string(),
+            "192.168.1.3".to_string(),
+        ]);
 
         let pairs = cache_command.prep_obj_pairs().unwrap();
         let ip_pair = pairs.iter().filter(|x| x.0.is_on());
