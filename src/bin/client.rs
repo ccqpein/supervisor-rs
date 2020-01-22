@@ -100,7 +100,7 @@ fn main() {
         streams = _streams
     }
 
-    //:= TODO: here to make encrypt data
+    // Here to check/make encrypt data
     let data_2_server = if let Ok(d) = cache_command.generate_encrypt_wapper() {
         d.encrypt_to_bytes().unwrap()
     } else {

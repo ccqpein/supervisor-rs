@@ -5,7 +5,7 @@ use std::io::prelude::*;
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq)]
 pub struct DataWrapper {
     key_name: String,
     key_path: Option<String>,
@@ -34,6 +34,13 @@ impl DataWrapper {
     pub fn unwrap_from(s: &[u8]) -> Result<(String, &[u8])> {
         // clean ";"
         let cache: Vec<&[u8]> = s.splitn(2, |num| *num == 59).collect();
+
+        if cache.len() == 1 {
+            return Err(Error::new(
+                ErrorKind::InvalidData,
+                "parsed data should only have two parts",
+            ));
+        }
 
         for c in &cache {
             if c.len() == 0 {
@@ -119,5 +126,16 @@ mod tests {
         // after server recieve
         let b = DataWrapper::decrypt_with_pubkey(&a, rsa).unwrap();
         assert_eq!(data, b.data)
+    }
+
+    #[test]
+    fn test_unwrap_from() {
+        let failed_data = "aaaaabbbbbb".as_bytes();
+        //dbg!(DataWrapper::unwrap_from(failed_data));
+        assert!(DataWrapper::unwrap_from(failed_data).is_err());
+
+        let failed_data1 = "aaaaa;bbbbbb".as_bytes();
+        let dw1 = DataWrapper::unwrap_from(failed_data1).unwrap();
+        assert_eq!(dw1, ("aaaaa".to_string(), "bbbbbb".as_bytes()));
     }
 }

@@ -483,6 +483,7 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
     let mut buf_vec = buf.to_vec();
     buf_vec.retain(|&x| x != 0);
 
+    // here to check if this command with
     let received_comm = {
         match DataWrapper::unwrap_from(&buf_vec) {
             Ok((keyname, data)) => {

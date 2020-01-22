@@ -20,7 +20,6 @@ pub struct Kindergarten {
     // cannot accept duplicated name
     name_list: HashMap<String, u32>,
 
-    //:= TODO: this value come from server
     // key files path
     keys_files: HashMap<String, String>,
 }

@@ -205,7 +205,6 @@ impl Command {
         )
     }
 
-    //:= TODO: need test
     pub fn generate_encrypt_wapper(&self) -> Result<DataWrapper> {
         if self.prep.is_none() {
             return Err(Error::new(
@@ -302,5 +301,24 @@ mod tests {
             obj: None,
         };
         assert_eq!(case0.prep_obj_pairs(), None);
+    }
+
+    #[test]
+    fn check_generate_encrypt_wapper() -> Result<()> {
+        let mut case0 = vec![
+            "start",
+            "child",
+            "with",
+            "./test/public.pem",
+            "on",
+            "127.0.0.1",
+        ];
+        let com0 = Command::new_from_str(case0)?;
+        let dw = com0.generate_encrypt_wapper()?;
+        assert_eq!(
+            dw,
+            DataWrapper::new("./test/public.pem", "start child").unwrap()
+        );
+        Ok(())
     }
 }
