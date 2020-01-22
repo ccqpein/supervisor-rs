@@ -3,25 +3,35 @@ use openssl::rsa::{Padding, Rsa};
 use std::fs::File;
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind, Result};
+use std::path::Path;
 
 #[derive(Debug)]
 pub struct DataWrapper {
     key_name: String,
     key_path: Option<String>,
-    data: String,
+    pub data: String,
 }
 
 impl DataWrapper {
-    pub fn new(k: &str, data: &str) -> Self {
-        DataWrapper {
-            key_name: k.to_string(),
-            key_path: None,
+    pub fn new(kpath: &str, data: &str) -> Result<Self> {
+        let key_name = if let Some(f) = Path::new(kpath).file_stem() {
+            f.to_str().unwrap().to_string()
+        } else {
+            return Err(Error::new(
+                ErrorKind::NotFound,
+                "Key file path is not right, cannot get filename",
+            ));
+        };
+
+        Ok(DataWrapper {
+            key_name: key_name,
+            key_path: Some(kpath.to_string()),
             data: data.to_string(),
-        }
+        })
     }
 
-    // for server
-    fn unwrap_from(s: &[u8]) -> Result<(String, &[u8])> {
+    // for server, receive data and parse to (keyname, true data)
+    pub fn unwrap_from(s: &[u8]) -> Result<(String, &[u8])> {
         // clean ";"
         let cache: Vec<&[u8]> = s.splitn(2, |num| *num == 59).collect();
 
@@ -42,7 +52,7 @@ impl DataWrapper {
         Ok((key_name, cache[1]))
     }
 
-    fn decrypt_with_pubkey<T: HasPublic>(s: &[u8], pubkey: Rsa<T>) -> Result<Self> {
+    pub fn decrypt_with_pubkey<T: HasPublic>(s: &[u8], pubkey: Rsa<T>) -> Result<Self> {
         let (keyname, data) = Self::unwrap_from(s)?;
 
         // decrypt
@@ -88,10 +98,6 @@ impl DataWrapper {
 
         self.encrypt_with_prikey(p_key)
     }
-
-    //:= TODO: finish this function with server side
-    // pub fn decrypt_from_bytes(s: &[u8]) -> Result<Self>{
-    // }
 }
 
 #[cfg(test)]
@@ -106,6 +112,7 @@ mod tests {
 
         // data client send to server
         let a = DataWrapper::new("test", data)
+            .unwrap()
             .encrypt_with_prikey(rsa.clone())
             .unwrap();
 

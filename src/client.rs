@@ -58,7 +58,7 @@ impl Ops {
 #[derive(Debug, PartialEq)]
 pub enum Prepositions {
     On,
-    With, //:= Keys prepositions
+    With, //:= DOC: Keys prepositions
 }
 
 impl Prepositions {
@@ -215,7 +215,7 @@ impl Command {
         }
 
         if let Some(p) = self.prep.as_ref().unwrap().iter().position(|s| s.is_with()) {
-            let keyname = if let Some(objs) = &self.obj {
+            let keypath = if let Some(objs) = &self.obj {
                 if let Some(f) = objs.get(p) {
                     f
                 } else {
@@ -231,10 +231,7 @@ impl Command {
                 ));
             };
 
-            Ok(DataWrapper::new(
-                &keyname,
-                str::from_utf8(&self.as_bytes()).unwrap(),
-            ))
+            DataWrapper::new(&keypath, str::from_utf8(&self.as_bytes()).unwrap())
         } else {
             return Err(Error::new(
                 ErrorKind::NotFound,

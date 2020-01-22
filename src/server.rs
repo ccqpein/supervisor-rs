@@ -1,5 +1,6 @@
 use super::child::{child_output::OutputMode, Config};
 use super::client;
+use super::keys_handler::*;
 use super::kindergarten::*;
 use super::logger;
 use super::timer::*;
@@ -20,8 +21,10 @@ use std::sync::{Arc, Mutex};
 
 #[derive(Debug)]
 struct ServerConfig {
-    //path for all children's configs
+    // path for all children's configs
     load_paths: Vec<String>,
+
+    // startup mode
     mode: String,
     startup_list: Option<Vec<String>>,
 
@@ -96,9 +99,9 @@ impl ServerConfig {
         Ok(result)
     }
 
-    //when mode == "half"
-    //it should return all children details those in loadpaths also...
-    //in startup field of server config.
+    // when mode == "half"
+    // it should return all children details those in loadpaths also...
+    // in startup field of server config.
     fn half_mode(&self) -> Result<Vec<(String, String)>> {
         let children_set = match &self.startup_list {
             Some(startups) => startups.iter().collect::<HashSet<&String>>(),
@@ -133,6 +136,35 @@ impl ServerConfig {
                                     .to_string(),
                                 entry.path().to_str().unwrap().to_string(),
                             ));
+                        }
+                    }
+                }
+            }
+        }
+        Ok(result)
+    }
+
+    //:= TEST: need test
+    fn all_pub_keys(&self) -> Result<Vec<(String, String)>> {
+        let mut result: Vec<(String, String)> = vec![];
+        if let Some(paths) = &self.keys_path {
+            for path in paths {
+                for entry in fs::read_dir(path)? {
+                    if let Ok(entry) = entry {
+                        if let Some(extension) = entry.path().extension() {
+                            if extension == "pem" {
+                                //:= DOC: need in doc
+                                result.push((
+                                    entry
+                                        .file_name()
+                                        .to_str()
+                                        .unwrap()
+                                        .split('.')
+                                        .collect::<Vec<&str>>()[0]
+                                        .to_string(),
+                                    entry.path().to_str().unwrap().to_string(),
+                                ));
+                            }
                         }
                     }
                 }
@@ -229,8 +261,8 @@ impl ServerConfig {
     }
 }
 
-//start a child processing, and give child_handle
-//side effection: config.child_id be updated
+// start a child processing, and give child_handle
+// side effection: config.child_id be updated
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
@@ -311,11 +343,11 @@ fn child_name_legal_check(s: &str) -> core::result::Result<(), String> {
     Ok(())
 }
 
-//Receive server config and start a new server
-//new server including:
-//1. a way receive command from client //move to start_deamon
-//2. first start will start all children in config path
-//3. then keep listening commands and can restart each of them //move to start deamon
+// Receive server config and start a new server
+// new server including:
+// 1. a way receive command from client //move to start_deamon
+// 2. first start will start all children in config path
+// 3. then keep listening commands and can restart each of them //move to start deamon
 pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //Read server's config file
     let server_conf = if config_path == "" {
@@ -327,10 +359,13 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     //create new kindergarten
     let mut kindergarten = Kindergarten::new();
 
-    //store server config location
+    // store server config location
     kindergarten.server_config_path = config_path.to_string();
 
-    //make startup children vec
+    // kindergarden store keys files
+    kindergarten.store_keys(server_conf.all_pub_keys()?);
+
+    // make startup children vec
     let startup_children = match server_conf.mode.as_ref() {
         "full" => server_conf.all_ymls_in_load_path()?,
         "half" => server_conf.half_mode()?,
@@ -448,9 +483,16 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
     let mut buf_vec = buf.to_vec();
     buf_vec.retain(|&x| x != 0);
 
-    //:= TODO: here to decrypt data
-
-    let received_comm = String::from_utf8(buf_vec).unwrap();
+    let received_comm = {
+        match DataWrapper::unwrap_from(&buf_vec) {
+            Ok((keyname, data)) => {
+                let key = kig.lock().unwrap().read_key_with_name(keyname)?;
+                let dw = DataWrapper::decrypt_with_pubkey(data, key)?;
+                dw.data
+            }
+            Err(_) => String::from_utf8(buf_vec).unwrap(),
+        }
+    };
 
     match day_care(kig, received_comm) {
         Ok(resp) => {

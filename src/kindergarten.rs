@@ -1,8 +1,11 @@
 use super::child::Config;
 use super::logger;
 use super::server::*;
+use openssl::pkey::Public;
+use openssl::rsa::*;
 use std::collections::HashMap;
-use std::io::{Error as ioError, ErrorKind, Result};
+use std::fs::File;
+use std::io::{prelude::*, Error as ioError, ErrorKind, Result};
 use std::process::Child;
 
 #[derive(Debug)]
@@ -10,12 +13,16 @@ pub struct Kindergarten {
     // store where is server config
     pub server_config_path: String,
 
-    //child_id -> (child_handle, this child's config)
+    // child_id -> (child_handle, this child's config)
     id_list: HashMap<u32, (Child, Config)>,
 
-    //child_name -> child_id
-    //cannot accept duplicated name
+    // child_name -> child_id
+    // cannot accept duplicated name
     name_list: HashMap<String, u32>,
+
+    //:= TODO: this value come from server
+    // key files path
+    keys_files: HashMap<String, String>,
 }
 
 impl Kindergarten {
@@ -24,6 +31,7 @@ impl Kindergarten {
             server_config_path: "".to_string(),
             id_list: HashMap::new(),
             name_list: HashMap::new(),
+            keys_files: HashMap::new(),
         }
     }
 
@@ -35,13 +43,39 @@ impl Kindergarten {
         self.name_list.insert(name.clone(), id);
     }
 
-    //update
+    pub fn store_keys(&mut self, keys_pair: Vec<(String, String)>) {
+        for i in keys_pair {
+            self.keys_files.insert(i.0, i.1);
+        }
+    }
+
+    pub fn read_key_with_name(&self, keyname: String) -> Result<Rsa<Public>> {
+        let mut content = String::new();
+        match self.keys_files.get(&keyname) {
+            Some(k_path) => {
+                File::open(k_path)?.read_to_string(&mut content);
+            }
+            None => {
+                return Err(ioError::new(
+                    ErrorKind::NotFound,
+                    "no key file path found in kindergarden",
+                ))
+            }
+        }
+
+        match Rsa::public_key_from_pem(&content.as_bytes()) {
+            Ok(k) => Ok(k),
+            Err(e) => Err(ioError::new(ErrorKind::NotFound, e)),
+        }
+    }
+
+    // update
     fn update(&mut self, id: u32, name: &String, child: Child, config: Config) {
         self.register_id(id, child, config);
         self.register_name(name, id);
     }
 
-    //pre_hook_chain: Vec<(command, name, config)>
+    // pre_hook_chain: Vec<(command, name, config)>
     pub fn handle_pre_hook(&mut self, pre_hook_chain: Vec<(String, String, Config)>) -> Result<()> {
         //pre_hook_chain.reverse();
         for each in pre_hook_chain.iter() {
@@ -55,8 +89,8 @@ impl Kindergarten {
         Ok(())
     }
 
-    //start child
-    //this function will start child without if child has been started or not.
+    // start child
+    // this function will start child without if child has been started or not.
     pub fn start(&mut self, name: &String, config: &mut Config) -> Result<()> {
         //check inside again (because "start" in server has checked once) here...
         //...because prehook need check too, but it does not check in server
