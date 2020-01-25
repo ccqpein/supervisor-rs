@@ -29,6 +29,8 @@ struct ServerConfig {
     startup_list: Option<Vec<String>>,
 
     // client public keys location
+    //:= DOC: need add new server config format
+    encrypt_mode: String,
     keys_path: Option<Vec<String>>,
 }
 
@@ -50,6 +52,7 @@ impl ServerConfig {
             mode: "quiet".to_string(),
             startup_list: None,
 
+            encrypt_mode: "off".to_string(), //:= DOC: need write in doc that this field is lower case
             keys_path: None,
         };
 
@@ -83,6 +86,13 @@ impl ServerConfig {
                     None => return Ok(result),
                 };
                 result.startup_list = Some(startup_children);
+
+                // encrypt parse
+                let encrypt = match doc["encrypt"].as_str() {
+                    Some(v) => v.to_string(),
+                    None => return Ok(result),
+                };
+                result.encrypt_mode = encrypt;
 
                 // keys path parse
                 let keys_paths = match doc["pub_keys_path"].as_vec() {
@@ -362,8 +372,10 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     // store server config location
     kindergarten.server_config_path = config_path.to_string();
 
-    // kindergarden store keys files
-    kindergarten.store_keys(server_conf.all_pub_keys()?);
+    // kindergarden make encrypt on and store keys files,
+    if server_conf.encrypt_mode == "on" {
+        kindergarten.store_keys(server_conf.all_pub_keys()?);
+    }
 
     // make startup children vec
     let startup_children = match server_conf.mode.as_ref() {
@@ -484,14 +496,15 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
     buf_vec.retain(|&x| x != 0);
 
     // here to check if this command with
-    let received_comm = {
-        match DataWrapper::unwrap_from(&buf_vec) {
-            Ok((keyname, data)) => {
-                let key = kig.lock().unwrap().read_key_with_name(keyname)?;
-                let dw = DataWrapper::decrypt_with_pubkey(data, key)?;
-                dw.data
-            }
-            Err(_) => String::from_utf8(buf_vec).unwrap(),
+    let received_comm = if kig.lock().unwrap().encrypt_mode {
+        let (keyname, data) = DataWrapper::unwrap_from(&buf_vec)?;
+        let key = kig.lock().unwrap().read_key_with_name(keyname)?;
+        let dw = DataWrapper::decrypt_with_pubkey(data, key)?;
+        dw.data
+    } else {
+        match String::from_utf8(buf_vec) {
+            Ok(s) => s,
+            Err(e) => return Err(ioError::new(ErrorKind::InvalidInput, e)),
         }
     };
 

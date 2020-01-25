@@ -1,5 +1,4 @@
 use std::env;
-use std::error::Error;
 use std::io::prelude::*;
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::time::Duration;
@@ -16,7 +15,7 @@ fn main() {
     let cache_command = match Command::new_from_string(change_2_vec[1..].to_vec()) {
         Ok(c) => c,
         Err(e) => {
-            println!("error: {}", e.description());
+            println!("error: {}", e);
             return;
         }
     };
@@ -66,12 +65,7 @@ fn main() {
                 match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
                     Ok(s) => _streams.push(s),
                     Err(e) => {
-                        println!(
-                            "error of {}: {}; {}",
-                            addr,
-                            e.description(),
-                            CANNOT_REACH_SERVER_ERROR
-                        );
+                        println!("error of {}: {}; {}", addr, e, CANNOT_REACH_SERVER_ERROR);
                         return;
                     }
                 };
@@ -89,11 +83,7 @@ fn main() {
         match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
             Ok(s) => _streams.push(s),
             Err(e) => {
-                println!(
-                    "error of 127.0.0.1: {}; {}",
-                    e.description(),
-                    CANNOT_REACH_SERVER_ERROR
-                );
+                println!("error of 127.0.0.1: {}; {}", e, CANNOT_REACH_SERVER_ERROR);
                 return;
             }
         }
@@ -116,18 +106,18 @@ fn main() {
         };
 
         if let Err(e) = stream.write_all(&data_2_server) {
-            println!("Error from {}:\n {}", address, e.description());
+            println!("Error from {}:\n {}", address, e);
             return;
         };
 
         if let Err(e) = stream.flush() {
-            println!("Error from {}:\n {}", address, e.description());
+            println!("Error from {}:\n {}", address, e);
             return;
         };
 
         let mut response = String::new();
         if let Err(e) = stream.read_to_string(&mut response) {
-            println!("Error from {}:\n {}", address, e.description());
+            println!("Error from {}:\n {}", address, e);
             return;
         };
 

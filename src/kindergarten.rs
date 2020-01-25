@@ -20,6 +20,8 @@ pub struct Kindergarten {
     // cannot accept duplicated name
     name_list: HashMap<String, u32>,
 
+    // encrypt mode
+    pub encrypt_mode: bool,
     // key files path
     keys_files: HashMap<String, String>,
 }
@@ -30,6 +32,8 @@ impl Kindergarten {
             server_config_path: "".to_string(),
             id_list: HashMap::new(),
             name_list: HashMap::new(),
+
+            encrypt_mode: false,
             keys_files: HashMap::new(),
         }
     }
@@ -44,6 +48,7 @@ impl Kindergarten {
 
     pub fn store_keys(&mut self, keys_pair: Vec<(String, String)>) {
         for i in keys_pair {
+            self.encrypt_mode = true; // if any keys_pairs, set true
             self.keys_files.insert(i.0, i.1);
         }
     }
