@@ -2,7 +2,7 @@
 
 `supervisor-rs` used to be a manager of handle application running. `supervisor-rs` can start/restart/stop processing.
 
-**features**:
+**Features**:
 
 + start different processing depend on particular yaml file when startup
 + start processing when have new config in load path
@@ -10,13 +10,13 @@
 + restart processing
 + stop processing
 
-**design**:
+**Design**:
 
 1. server/client mode
 2. server start -> load config files from loadpaths (if it is not quiet mode) -> do job
 3. start/stop/restart/tryrestart special processing (client side)
 
-**config yaml file format**:
+**Config yaml files format**:
 
 server.yaml:
 
@@ -87,6 +87,8 @@ commands:
 | check    | return summary of all children who are **running**. If children are not running, no matter what reason, they will be cleaned from kindergarden's table.                                                                                                                                    |
 | trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
 | kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
+
+### Use key pairs authenticate clients###
 
 ### Startup-with feature ###
 
