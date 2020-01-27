@@ -67,13 +67,15 @@ run server with special config file:
 
 ### Client Side ###
 
-**Restart child processing**:
+**Operate child processing**:
 
 `supervisor-rs-client restart child0 on localhost` will restart processing `child0` on localhost;
 
 `supervisor-rs-client restart child0 on 198.0.0.2` will restart processing `child0` on `192.0.0.2`, I assume you running server side application on this host;
 
-`supervisor-rs-client restart child0 on "198.0.0.2, 198.0.0.3"` will restart processing `child0` on `192.0.0.2` and `192.0.0.3`, I assume you running server side application on this host;
+`supervisor-rs-client restart child0 on "198.0.0.2, 198.0.0.3"` will restart processing `child0` on `192.0.0.2` and `192.0.0.3`, I assume you running server side application on these hosts;
+
+After version `0.6` command upper equal with `supervisor-rs-client restart child0 on 198.0.0.2 on 198.0.0.3`
 
 child name is not must for `check`/`kill` commands.
 
@@ -89,6 +91,8 @@ commands:
 | kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
 
 ### Use key pairs authenticate clients###
+
+
 
 ### Startup-with feature ###
 
