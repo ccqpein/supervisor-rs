@@ -92,7 +92,7 @@ commands:
 
 ### Use key pairs authenticate clients###
 
-
+When server side turn on encrypt mode, server side will check if data it received can decrypt by public keys in `pub_keys_path`
 
 ### Startup-with feature ###
 
