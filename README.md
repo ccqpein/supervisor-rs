@@ -94,6 +94,19 @@ commands:
 
 When server side turn on encrypt mode, server side will check if data it received can decrypt by public keys in `pub_keys_path`
 
+#### Example ####
+
+**Server side configuration**:
+
+```yaml
+TODO
+```
+
+Server side will pick key's name out from command received from client and find same `filename` public key in the `pub_keys_path`. As same as children names, key's name also equal the key file's name. So, make sure there ain't any key files have same names. 
+
+
+**Client side command**
+
 ### Startup-with feature ###
 
 If `server's config` mode is `half`, server will try to startup all children in `startup` list when it starts.
