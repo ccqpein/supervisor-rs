@@ -6,6 +6,7 @@ use super::logger;
 use super::timer::*;
 
 use chrono::prelude::*;
+use openssl::rsa::*;
 use std::collections::HashSet;
 use std::error::Error;
 use std::fs;
@@ -128,7 +129,7 @@ impl ServerConfig {
         Ok(result)
     }
 
-    //return vec of (filename, path)
+    // return vec of (filename, path)
     fn all_ymls_in_load_path(&self) -> Result<Vec<(String, String)>> {
         let mut result: Vec<(String, String)> = vec![];
         for path in self.load_paths.clone() {
@@ -146,35 +147,6 @@ impl ServerConfig {
                                     .to_string(),
                                 entry.path().to_str().unwrap().to_string(),
                             ));
-                        }
-                    }
-                }
-            }
-        }
-        Ok(result)
-    }
-
-    //:= TEST: need test
-    fn all_pub_keys(&self) -> Result<Vec<(String, String)>> {
-        let mut result: Vec<(String, String)> = vec![];
-        if let Some(paths) = &self.keys_path {
-            for path in paths {
-                for entry in fs::read_dir(path)? {
-                    if let Ok(entry) = entry {
-                        if let Some(extension) = entry.path().extension() {
-                            if extension == "pem" {
-                                //:= DOC: need in doc
-                                result.push((
-                                    entry
-                                        .file_name()
-                                        .to_str()
-                                        .unwrap()
-                                        .split('.')
-                                        .collect::<Vec<&str>>()[0]
-                                        .to_string(),
-                                    entry.path().to_str().unwrap().to_string(),
-                                ));
-                            }
                         }
                     }
                 }
@@ -210,6 +182,42 @@ impl ServerConfig {
         Err(ioError::new(
             ErrorKind::NotFound,
             format!("Cannot found '{}' file in load path", filename),
+        ))
+    }
+
+    // return key's path
+    fn find_pubkey_by_name(&self, filename: &String) -> Result<String> {
+        if let Some(paths) = &self.keys_path {
+            for path in paths {
+                for entry in fs::read_dir(path)? {
+                    if let Ok(entry) = entry {
+                        if let Some(extension) = entry.path().extension() {
+                            if extension == "pem" {
+                                if entry
+                                    .file_name()
+                                    .to_str()
+                                    .unwrap()
+                                    .split('.')
+                                    .collect::<Vec<&str>>()[0]
+                                    .to_string()
+                                    == *filename
+                                {
+                                    return Ok(entry
+                                        .path()
+                                        .into_os_string()
+                                        .into_string()
+                                        .unwrap());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        Err(ioError::new(
+            ErrorKind::NotFound,
+            format!("Cannot found '{}' file in keys path", filename),
         ))
     }
 
@@ -372,9 +380,9 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     // store server config location
     kindergarten.server_config_path = config_path.to_string();
 
-    // kindergarden make encrypt on and store keys files,
+    // kindergarden make encrypt on
     if server_conf.encrypt_mode == "on" {
-        kindergarten.store_keys(server_conf.all_pub_keys()?);
+        kindergarten.encrypt_mode = true;
     }
 
     // make startup children vec
@@ -465,14 +473,18 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
                             //hard check if it is suicide operation, because I only care this message so far.
                             //this operation isn't in handle_client because it has make sure return to client..
                             //..first
-                            let (first, second) = e.description().split_at(12);
+                            let (first, second) = {
+                                let s = e.to_string();
+                                let (f, ss) = s.split_at(12);
+                                (f.to_string(), ss.to_string())
+                            };
                             if first == "I am dying. " {
-                                println!("{}", logger::timelog(second));
+                                println!("{}", logger::timelog(&second));
                                 //tell main thread,
                                 sd_.send((first.to_string(), second.to_string())).unwrap();
                             } else {
                                 //if just normal error
-                                println!("{}", logger::timelog(e.description()));
+                                println!("{}", logger::timelog(&e.to_string()));
                             }
                         }
                         Ok(des) => println!("{}", logger::timelog(&des)),
@@ -480,7 +492,7 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
                 });
             }
 
-            Err(e) => println!("{}", logger::timelog(e.description())),
+            Err(e) => println!("{}", logger::timelog(&e.to_string())),
         }
     }
 
@@ -497,8 +509,23 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
 
     // here to check if this command with
     let received_comm = if kig.lock().unwrap().encrypt_mode {
+        // re-read server config
+        let server_conf = if kig.lock().unwrap().server_config_path == "" {
+            ServerConfig::load("/tmp/server.yml")?
+        } else {
+            ServerConfig::load(&kig.lock().unwrap().server_config_path)?
+        };
+
+        // parse keyname and data
         let (keyname, data) = DataWrapper::unwrap_from(&buf_vec)?;
-        let key = kig.lock().unwrap().read_key_with_name(keyname)?;
+
+        let key = {
+            let k_path = server_conf.find_pubkey_by_name(&keyname)?;
+            let mut content = String::new();
+            File::open(k_path)?.read_to_string(&mut content);
+            Rsa::public_key_from_pem(&content.as_bytes())?
+        }; //:= TODO: need test if it has dead lock
+
         let dw = DataWrapper::decrypt_with_pubkey(data, key)?;
         dw.data
     } else {
@@ -514,7 +541,7 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
             Ok(resp)
         }
         Err(e) => {
-            stream.write_all(e.description().as_bytes())?;
+            stream.write_all(e.to_string().as_bytes())?;
             Err(e)
         }
     }
@@ -773,7 +800,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             let mut last_will = String::new();
             // step1: stop all
             if let Err(e) = kg.stop(&"all".to_string()) {
-                last_will.push_str(&format!("there is error when stop all {}", e.description()));
+                last_will.push_str(&format!("there is error when stop all {}", e));
             }
 
             // step2: return special err outside, let deamon know and stop

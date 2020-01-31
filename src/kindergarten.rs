@@ -22,8 +22,6 @@ pub struct Kindergarten {
 
     // encrypt mode
     pub encrypt_mode: bool,
-    // key files path
-    keys_files: HashMap<String, String>,
 }
 
 impl Kindergarten {
@@ -34,7 +32,6 @@ impl Kindergarten {
             name_list: HashMap::new(),
 
             encrypt_mode: false,
-            keys_files: HashMap::new(),
         }
     }
 
@@ -44,33 +41,6 @@ impl Kindergarten {
 
     pub fn register_name(&mut self, name: &String, id: u32) {
         self.name_list.insert(name.clone(), id);
-    }
-
-    pub fn store_keys(&mut self, keys_pair: Vec<(String, String)>) {
-        for i in keys_pair {
-            self.encrypt_mode = true; // if any keys_pairs, set true
-            self.keys_files.insert(i.0, i.1);
-        }
-    }
-
-    pub fn read_key_with_name(&self, keyname: String) -> Result<Rsa<Public>> {
-        let mut content = String::new();
-        match self.keys_files.get(&keyname) {
-            Some(k_path) => {
-                File::open(k_path)?.read_to_string(&mut content);
-            }
-            None => {
-                return Err(ioError::new(
-                    ErrorKind::NotFound,
-                    "no key file path found in kindergarden",
-                ))
-            }
-        }
-
-        match Rsa::public_key_from_pem(&content.as_bytes()) {
-            Ok(k) => Ok(k),
-            Err(e) => Err(ioError::new(ErrorKind::NotFound, e)),
-        }
     }
 
     // update

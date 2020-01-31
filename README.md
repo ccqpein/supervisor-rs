@@ -94,18 +94,33 @@ commands:
 
 When server side turn on encrypt mode, server side will check if data it received can decrypt by public keys in `pub_keys_path`
 
-#### Example ####
+#### Example: ####
 
 **Server side configuration**:
 
 ```yaml
-TODO
+loadpaths:
+  - /tmp/client/
+  - /tmp/second/path
+  
+encrypt: "on"
+pub_keys_path:
+  - /tmp/pub_keys/
+  - /tmp/pub_keys2/
 ```
 
-Server side will pick key's name out from command received from client and find same `filename` public key in the `pub_keys_path`. As same as children names, key's name also equal the key file's name. So, make sure there ain't any key files have same names. 
+Server side will pick key's name out from command received from client and find same `filename` public key (only support `.pem` file) in the `pub_keys_path`. As same as children names, key's name also equal the key file's name. So, make sure there ain't any key files have same names. 
 
 
 **Client side command**
+
+On client side, just run `supervisor-rs-client restart child0 on 198.0.0.2 on 198.0.0.3 with /path/to/key/keyname1.pem`. 
+
+Then supervisor will go find key file has named `keyname1`. As flexible as you can change child config after supervisor start, you can also put public key files in `pub_keys_path` while supervisor is running.
+
+**FYI**
+
+You cannot change encrypt mode when supervisor-rs running.
 
 ### Startup-with feature ###
 
