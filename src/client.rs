@@ -58,7 +58,7 @@ impl Ops {
 #[derive(Debug, PartialEq)]
 pub enum Prepositions {
     On,
-    With, //:= DOC: Keys prepositions
+    With,
 }
 
 impl Prepositions {

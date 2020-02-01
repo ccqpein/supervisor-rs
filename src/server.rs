@@ -30,7 +30,6 @@ struct ServerConfig {
     startup_list: Option<Vec<String>>,
 
     // client public keys location
-    //:= DOC: need add new server config format
     encrypt_mode: String,
     keys_path: Option<Vec<String>>,
 }
@@ -53,7 +52,7 @@ impl ServerConfig {
             mode: "quiet".to_string(),
             startup_list: None,
 
-            encrypt_mode: "off".to_string(), //:= DOC: need write in doc that this field is lower case
+            encrypt_mode: "off".to_string(),
             keys_path: None,
         };
 
@@ -105,7 +104,7 @@ impl ServerConfig {
                 };
                 result.keys_path = Some(keys_paths);
             }
-            Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
+            Err(e) => return Err(ioError::new(ErrorKind::Other, e)),
         }
         Ok(result)
     }
@@ -389,7 +388,15 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     let startup_children = match server_conf.mode.as_ref() {
         "full" => server_conf.all_ymls_in_load_path()?,
         "half" => server_conf.half_mode()?,
-        "quiet" | _ => vec![],
+        "quiet" | _ => {
+            // check if load path is legal or not when server start
+            // full and quiet mode already checked when server try to read
+            // start up children
+            for p in server_conf.load_paths {
+                fs::read_dir(p)?;
+            }
+            vec![]
+        }
     };
 
     //print log

@@ -109,7 +109,7 @@ pub_keys_path:
   - /tmp/pub_keys2/
 ```
 
-Server side will pick key's name out from command received from client and find same `filename` public key (only support `.pem` file) in the `pub_keys_path`. As same as children names, key's name also equal the key file's name. So, make sure there ain't any key files have same names. 
+When server start with `encrypt: "on"` (only support lowercase), server side will pick key's name out from command received from client and find same `filename` public key (only support `.pem` file) in the `pub_keys_path`. As same as children names, key's name also equal the key file's name. So, make sure there ain't any key files have same names. 
 
 
 **Client side command**
@@ -117,6 +117,20 @@ Server side will pick key's name out from command received from client and find 
 On client side, just run `supervisor-rs-client restart child0 on 198.0.0.2 on 198.0.0.3 with /path/to/key/keyname1.pem`. 
 
 Then supervisor will go find key file has named `keyname1`. As flexible as you can change child config after supervisor start, you can also put public key files in `pub_keys_path` while supervisor is running.
+
+**Make keypairs**
+
+Step 1: Make private key
+`openssl genrsa -out private.pem 4096`
+
+Remember: key size should less or equal 4096
+
+
+Step 2: Make public key
+`openssl rsa -in private.pem -outform PEM -pubout -out public.pem`
+
+Then, put public key in one of server's `pub_keys_path`. Every commands you send to server side should has `with /path/to/private.pem`.
+
 
 **FYI**
 
