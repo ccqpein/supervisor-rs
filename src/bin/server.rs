@@ -1,5 +1,4 @@
 use std::env;
-use std::error::Error;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
@@ -24,7 +23,7 @@ fn main() {
     let k = match k_result {
         Ok(k) => k,
         Err(e) => {
-            println!("{}", logger::timelog(e.description()));
+            println!("{}", logger::timelog(&e.to_string()));
             return;
         }
     };

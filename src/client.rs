@@ -242,15 +242,17 @@ impl Command {
     // ops + ' ' + childname
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut cache = self.op.to_string().as_bytes().to_vec();
-        cache.push(b' ');
-        cache.append(
-            &mut self
-                .child_name
-                .as_ref()
-                .unwrap_or(&String::new())
-                .as_bytes()
-                .to_vec(),
-        );
+        if self.child_name.is_some() {
+            cache.push(b' ');
+            cache.append(
+                &mut self
+                    .child_name
+                    .as_ref()
+                    .unwrap_or(&String::new())
+                    .as_bytes()
+                    .to_vec(),
+            );
+        }
 
         cache.clone()
     }
@@ -319,6 +321,12 @@ mod tests {
             dw,
             DataWrapper::new("./test/public.pem", "start child").unwrap()
         );
+        println!("{:?}", dw);
+
+        let case1 = vec!["check", "with", "./test/public.pem", "on", "127.0.0.1"];
+        let com0 = Command::new_from_str(case1)?;
+        let dw = com0.generate_encrypt_wapper()?;
+        assert_eq!(dw, DataWrapper::new("./test/public.pem", "check").unwrap());
         Ok(())
     }
 }

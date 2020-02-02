@@ -4,7 +4,6 @@ mod child_repeat;
 
 use super::logger;
 use chrono::prelude::*;
-use std::error::Error;
 use std::fmt;
 use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
@@ -64,7 +63,7 @@ impl Config {
                     Ok(r) => Some(r),
                     Err(e) => {
                         if e.kind() != ErrorKind::NotFound {
-                            println!("{}", logger::timelog(e.description()));
+                            println!("{}", logger::timelog(&e.to_string()));
                         }
                         None
                     }
@@ -74,14 +73,14 @@ impl Config {
                     Ok(h) => Some(h),
                     Err(e) => {
                         if e.kind() != ErrorKind::NotFound {
-                            println!("{}", logger::timelog(e.description()));
+                            println!("{}", logger::timelog(&e.to_string()));
                         }
                         None
                     }
                 }
             }
 
-            Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
+            Err(e) => return Err(ioError::new(ErrorKind::Other, e.to_string())),
         }
 
         Ok(result)
@@ -96,7 +95,7 @@ impl Config {
                 return Self::read_from_str(string_result.as_str());
             }
 
-            Err(e) => return Err(ioError::new(ErrorKind::Other, e.description().to_string())),
+            Err(e) => return Err(ioError::new(ErrorKind::Other, e.to_string().to_string())),
         }
     }
 
@@ -281,5 +280,4 @@ repeat:
 
         println!("whole config is:\n{}", conf);
     }
-
 }

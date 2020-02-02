@@ -1,11 +1,8 @@
 use super::child::Config;
 use super::logger;
 use super::server::*;
-use openssl::pkey::Public;
-use openssl::rsa::*;
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{prelude::*, Error as ioError, ErrorKind, Result};
+use std::io::{Error as ioError, ErrorKind, Result};
 use std::process::Child;
 
 #[derive(Debug)]

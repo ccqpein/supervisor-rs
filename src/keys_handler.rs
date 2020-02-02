@@ -34,11 +34,11 @@ impl DataWrapper {
     pub fn unwrap_from(s: &[u8]) -> Result<(String, &[u8])> {
         // clean ";"
         let cache: Vec<&[u8]> = s.splitn(2, |num| *num == 59).collect();
-
+        println!("cache: {:?}", cache); //:= DEBUG
         if cache.len() == 1 {
             return Err(Error::new(
                 ErrorKind::InvalidData,
-                "parsed data should only have two parts",
+                "Cannot parse encrypt data",
             ));
         }
 
@@ -46,7 +46,7 @@ impl DataWrapper {
             if c.len() == 0 {
                 return Err(Error::new(
                     ErrorKind::InvalidData,
-                    "parsed data should only have two parts",
+                    "Keyname or command is empty",
                 ));
             }
         }
@@ -59,13 +59,15 @@ impl DataWrapper {
         Ok((key_name, cache[1]))
     }
 
-    pub fn decrypt_with_pubkey<T: HasPublic>(s: &[u8], pubkey: Rsa<T>) -> Result<Self> {
-        let (keyname, data) = Self::unwrap_from(s)?;
-
+    pub fn decrypt_with_pubkey<T: HasPublic>(
+        data: &[u8],
+        keyname: String,
+        pubkey: Rsa<T>,
+    ) -> Result<Self> {
         // decrypt
         let mut temp = vec![0; pubkey.size() as usize];
         pubkey.public_decrypt(&data, &mut temp, Padding::PKCS1)?;
-
+        println!("here? pubkey"); //:= DEBUG
         temp.retain(|x| *x != 0);
         let data = match String::from_utf8(temp) {
             Ok(s) => s,
@@ -123,8 +125,9 @@ mod tests {
             .encrypt_with_prikey(rsa.clone())
             .unwrap();
 
+        let (keyname, dd) = DataWrapper::unwrap_from(&a).unwrap();
         // after server recieve
-        let b = DataWrapper::decrypt_with_pubkey(&a, rsa).unwrap();
+        let b = DataWrapper::decrypt_with_pubkey(dd, keyname, rsa).unwrap();
         assert_eq!(data, b.data)
     }
 

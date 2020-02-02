@@ -97,6 +97,8 @@ fn main() {
         cache_command.as_bytes()
     };
 
+    println!("{:?}", data_2_server); //:= DEBUG
+
     //send same commands to all servers
     for mut stream in streams {
         let address = if let Ok(ad) = stream.peer_addr() {

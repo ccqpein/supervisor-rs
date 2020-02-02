@@ -8,7 +8,6 @@ use super::timer::*;
 use chrono::prelude::*;
 use openssl::rsa::*;
 use std::collections::HashSet;
-use std::error::Error;
 use std::fs;
 use std::fs::{File, OpenOptions};
 use std::io::{Error as ioError, ErrorKind, Read, Result, Write};
@@ -73,36 +72,38 @@ impl ServerConfig {
                 // mode parse
                 let mode = match doc["mode"].as_str() {
                     Some(v) => v.to_string(),
-                    None => return Ok(result),
+                    None => "quiet".to_string(),
                 };
                 result.mode = mode;
 
                 // startup parse
                 let startup_children = match doc["startup"].as_vec() {
-                    Some(v) => v
-                        .iter()
-                        .map(|x| x.clone().into_string().unwrap())
-                        .collect::<Vec<String>>(),
-                    None => return Ok(result),
+                    Some(v) => Some(
+                        v.iter()
+                            .map(|x| x.clone().into_string().unwrap())
+                            .collect::<Vec<String>>(),
+                    ),
+                    None => None,
                 };
-                result.startup_list = Some(startup_children);
+                result.startup_list = startup_children;
 
                 // encrypt parse
                 let encrypt = match doc["encrypt"].as_str() {
                     Some(v) => v.to_string(),
-                    None => return Ok(result),
+                    None => "off".to_string(),
                 };
                 result.encrypt_mode = encrypt;
 
                 // keys path parse
                 let keys_paths = match doc["pub_keys_path"].as_vec() {
-                    Some(v) => v
-                        .iter()
-                        .map(|x| x.clone().into_string().unwrap())
-                        .collect::<Vec<String>>(),
-                    None => return Ok(result),
+                    Some(v) => Some(
+                        v.iter()
+                            .map(|x| x.clone().into_string().unwrap())
+                            .collect::<Vec<String>>(),
+                    ),
+                    None => None,
                 };
-                result.keys_path = Some(keys_paths);
+                result.keys_path = keys_paths;
             }
             Err(e) => return Err(ioError::new(ErrorKind::Other, e)),
         }
@@ -373,7 +374,9 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
         ServerConfig::load(config_path)?
     };
 
-    //create new kindergarten
+    println!("{:?}", config_path); //:= DEBUG
+    println!("{:?}", server_conf); //:= DEBUG
+                                   //create new kindergarten
     let mut kindergarten = Kindergarten::new();
 
     // store server config location
@@ -381,6 +384,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
     // kindergarden make encrypt on
     if server_conf.encrypt_mode == "on" {
+        println!("encrypt is on"); //:= DEBUG
         kindergarten.encrypt_mode = true;
     }
 
@@ -388,15 +392,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     let startup_children = match server_conf.mode.as_ref() {
         "full" => server_conf.all_ymls_in_load_path()?,
         "half" => server_conf.half_mode()?,
-        "quiet" | _ => {
-            // check if load path is legal or not when server start
-            // full and quiet mode already checked when server try to read
-            // start up children
-            for p in server_conf.load_paths {
-                fs::read_dir(p)?;
-            }
-            vec![]
-        }
+        "quiet" | _ => vec![],
     };
 
     //print log
@@ -508,15 +504,23 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
 
 //get client TCP stream and send to channel
 fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
-    let mut buf = [0; 100 + 4096]; //:= DOC: need to write in doc
+    let mut buf = [0; 100 + 4096];
     stream.read(&mut buf)?;
 
-    let mut buf_vec = buf.to_vec();
-    buf_vec.retain(|&x| x != 0);
+    let mut buf_vec = {
+        let mut temp = buf.to_vec();
+        temp.reverse();
+        while temp[0] == 0 {
+            temp.drain(..1);
+        }
+        temp.reverse();
+        temp
+    };
 
     // here to check if this command with
     let received_comm = if kig.lock().unwrap().encrypt_mode {
-        // re-read server config
+        println!("Has encrypt"); //:= DEBUG
+                                 // re-read server config
         let server_conf = if kig.lock().unwrap().server_config_path == "" {
             ServerConfig::load("/tmp/server.yml")?
         } else {
@@ -528,14 +532,17 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
 
         let key = {
             let k_path = server_conf.find_pubkey_by_name(&keyname)?;
+            println!("key path: {:?}", k_path);
             let mut content = String::new();
-            File::open(k_path)?.read_to_string(&mut content);
+            let _ = File::open(k_path)?.read_to_string(&mut content);
             Rsa::public_key_from_pem(&content.as_bytes())?
-        }; //:= TODO: need test if it has dead lock
+        };
 
-        let dw = DataWrapper::decrypt_with_pubkey(data, key)?;
+        println!("Get key?");
+        let dw = DataWrapper::decrypt_with_pubkey(data, keyname, key)?;
         dw.data
     } else {
+        println!("No encrypt"); //:= DEBUG
         match String::from_utf8(buf_vec) {
             Ok(s) => s,
             Err(e) => return Err(ioError::new(ErrorKind::InvalidInput, e)),
@@ -750,7 +757,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                     Err(e) => {
                         return Err(ioError::new(
                             ErrorKind::InvalidData,
-                            format!("stop failed, error: {}", e.description()),
+                            format!("stop failed, error: {}", &e.to_string()),
                         ));
                     }
                 }
@@ -817,7 +824,9 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             ))
         }
 
-        client::Ops::Check => kg.check_status(command.child_name.as_ref().unwrap()),
+        client::Ops::Check => {
+            kg.check_status(command.child_name.as_ref().unwrap_or(&String::new()))
+        }
 
         _ => {
             return Err(ioError::new(

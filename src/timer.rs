@@ -1,7 +1,6 @@
 use super::kindergarten::*;
 use super::server;
 use super::*;
-use std::error::Error;
 use std::io::{Error as ioError, ErrorKind, Result};
 use std::sync::{Arc, Mutex};
 use std::{thread, time};
@@ -57,7 +56,7 @@ impl Timer {
         match server::day_care(kig, format!("{} {}", self.comm.clone(), self.name.clone())) {
             Err(e) => println!(
                 "{}",
-                logger::timelog(&format!("Timer is up, but {:?}", e.description()))
+                logger::timelog(&format!("Timer is up, but {:?}", e.to_string()))
             ),
             Ok(m) => println!(
                 "{}\n{}",
