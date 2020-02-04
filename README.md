@@ -90,7 +90,7 @@ commands:
 | trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
 | kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
 
-### Use key pairs authenticate clients###
+### Use key pairs authenticate clients ###
 
 When server side turn on encrypt mode, server side will check if data it received can decrypt by public keys in `pub_keys_path`
 
