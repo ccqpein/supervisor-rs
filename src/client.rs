@@ -292,6 +292,18 @@ mod tests {
             },
             Command::new_from_str(case0).unwrap()
         );
+
+        // test2
+        let mut case1 = vec!["restart", "child", "with", "key", "on", "host1, host2"]; // second hosts format
+        assert_eq!(
+            Command {
+                op: Ops::Restart,
+                child_name: Some("child".to_string()),
+                prep: Some(vec![Prepositions::With, Prepositions::On]),
+                obj: Some(vec!["key".to_string(), "host1, host2".to_string(),]),
+            },
+            Command::new_from_str(case1).unwrap()
+        );
     }
 
     #[test]

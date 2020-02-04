@@ -34,7 +34,7 @@ impl DataWrapper {
     pub fn unwrap_from(s: &[u8]) -> Result<(String, &[u8])> {
         // clean ";"
         let cache: Vec<&[u8]> = s.splitn(2, |num| *num == 59).collect();
-        println!("cache: {:?}", cache); //:= DEBUG
+
         if cache.len() == 1 {
             return Err(Error::new(
                 ErrorKind::InvalidData,
@@ -67,7 +67,7 @@ impl DataWrapper {
         // decrypt
         let mut temp = vec![0; pubkey.size() as usize];
         pubkey.public_decrypt(&data, &mut temp, Padding::PKCS1)?;
-        println!("here? pubkey"); //:= DEBUG
+
         temp.retain(|x| *x != 0);
         let data = match String::from_utf8(temp) {
             Ok(s) => s,

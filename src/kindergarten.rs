@@ -48,7 +48,6 @@ impl Kindergarten {
 
     // pre_hook_chain: Vec<(command, name, config)>
     pub fn handle_pre_hook(&mut self, pre_hook_chain: Vec<(String, String, Config)>) -> Result<()> {
-        //pre_hook_chain.reverse();
         for each in pre_hook_chain.iter() {
             match each.0.as_ref() {
                 "start" | "Start" => self.start(&each.1, &mut each.2.clone())?,

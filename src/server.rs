@@ -374,9 +374,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
         ServerConfig::load(config_path)?
     };
 
-    println!("{:?}", config_path); //:= DEBUG
-    println!("{:?}", server_conf); //:= DEBUG
-                                   //create new kindergarten
+    //create new kindergarten
     let mut kindergarten = Kindergarten::new();
 
     // store server config location
@@ -384,7 +382,6 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
     // kindergarden make encrypt on
     if server_conf.encrypt_mode == "on" {
-        println!("encrypt is on"); //:= DEBUG
         kindergarten.encrypt_mode = true;
     }
 
@@ -504,10 +501,10 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
 
 //get client TCP stream and send to channel
 fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
-    let mut buf = [0; 100 + 4096];
+    let mut buf = [0; 100 + 4096]; // 100 command length + 4096 key length buffer
     stream.read(&mut buf)?;
 
-    let mut buf_vec = {
+    let buf_vec = {
         let mut temp = buf.to_vec();
         temp.reverse();
         while temp[0] == 0 {
@@ -519,8 +516,10 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
 
     // here to check if this command with
     let received_comm = if kig.lock().unwrap().encrypt_mode {
-        println!("Has encrypt"); //:= DEBUG
-                                 // re-read server config
+        // tell client this server running in encrypt mode
+        stream.write_all("Running on encrypt mode, need to dencrypt your command.\n".as_bytes())?;
+
+        // re-read server config
         let server_conf = if kig.lock().unwrap().server_config_path == "" {
             ServerConfig::load("/tmp/server.yml")?
         } else {
@@ -528,21 +527,38 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
         };
 
         // parse keyname and data
-        let (keyname, data) = DataWrapper::unwrap_from(&buf_vec)?;
+        let (keyname, data) = match DataWrapper::unwrap_from(&buf_vec) {
+            Ok((n, d)) => (n, d),
+            Err(e) => {
+                stream.write_all(e.to_string().as_bytes())?;
+                return Err(e);
+            }
+        };
 
         let key = {
-            let k_path = server_conf.find_pubkey_by_name(&keyname)?;
-            println!("key path: {:?}", k_path);
+            let k_path = match server_conf.find_pubkey_by_name(&keyname) {
+                Ok(kk) => kk,
+                Err(e) => {
+                    stream.write_all(e.to_string().as_bytes())?;
+                    return Err(e);
+                }
+            };
+
             let mut content = String::new();
             let _ = File::open(k_path)?.read_to_string(&mut content);
             Rsa::public_key_from_pem(&content.as_bytes())?
         };
 
-        println!("Get key?");
-        let dw = DataWrapper::decrypt_with_pubkey(data, keyname, key)?;
+        let dw = match DataWrapper::decrypt_with_pubkey(data, keyname, key) {
+            Ok(d) => d,
+            Err(e) => {
+                stream.write_all(e.to_string().as_bytes())?;
+                return Err(e);
+            }
+        };
+
         dw.data
     } else {
-        println!("No encrypt"); //:= DEBUG
         match String::from_utf8(buf_vec) {
             Ok(s) => s,
             Err(e) => return Err(ioError::new(ErrorKind::InvalidInput, e)),

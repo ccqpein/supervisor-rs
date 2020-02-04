@@ -34,6 +34,8 @@ fn main() {
             //only accept ip address
             let ip_pair = pairs.iter().filter(|x| x.0.is_on());
             let addrs: Vec<IpAddr> = {
+                // ip address format can be "127.0.0.1" or "127.0.0.1, 127.0.0.2"
+                // this part need collect all addressed and *flatten* it
                 let addresses = ip_pair
                     .map(|des| {
                         des.1
@@ -44,6 +46,7 @@ fn main() {
                     .flatten()
                     .collect::<Vec<&str>>();
 
+                // change ip to UpAddr
                 let mut result: Vec<IpAddr> = vec![];
                 for a in addresses {
                     match a.parse::<IpAddr>() {
@@ -96,8 +99,6 @@ fn main() {
     } else {
         cache_command.as_bytes()
     };
-
-    println!("{:?}", data_2_server); //:= DEBUG
 
     //send same commands to all servers
     for mut stream in streams {
