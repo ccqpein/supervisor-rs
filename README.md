@@ -58,7 +58,17 @@ Server side's default mode is `quiet`, means server will record `loadphths`, but
 
 Each sub-processing is named with **filename** of yaml file. If have multi-loadpath, make sure **no yaml files have same name**. 
 
-**command demo:**
+**Change server's config while runtime**
+
+After server start, config path is strict but the content of config is negotiable. It means you can change what config are, but you cannot change where are it. 
+
+For example, you just want to add a new `loadpaths` to server. You can easily change `loadpaths` in server's config. However, server does not make it change immediately because no necessary. 
+
+Then you put a child config inside the `loadpath` you just add, then let it start ([Go to Client Side for usage](#client-side)). Server will re-read configuration and start it.
+
+Technically, server only keep configuration path, and read it again when server need to operate children or find key files.
+
+**Command demo:**
 
 run server with special config file:
 `supervisor-rs-server ./test/server.yml` 
@@ -132,7 +142,7 @@ Then, put public key in one of server's `pub_keys_path`. Every commands you send
 
 **FYI**
 
-You cannot change encrypt mode when supervisor-rs running.
+You **cannot** change encrypt mode when supervisor-rs running. But you can modify `pub_keys_path`.
 
 ### Startup-with feature ###
 
