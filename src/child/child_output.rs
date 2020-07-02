@@ -2,12 +2,14 @@ use std::fmt;
 use std::io::{Error as ioError, ErrorKind, Result};
 use yaml_rust::Yaml;
 
+/// Output mode struct. Create or Append
 #[derive(Debug, Copy, Clone)]
 pub enum OutputMode {
     Create,
     Append,
 }
 
+/// Output struct. Path and output mode
 #[derive(Debug, Clone)]
 pub struct Output {
     pub path: String,

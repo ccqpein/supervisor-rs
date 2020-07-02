@@ -1,6 +1,7 @@
-mod child_hook;
+//! child is the mod of children config
+pub mod child_hook;
 pub mod child_output;
-mod child_repeat;
+pub mod child_repeat;
 
 use super::logger;
 use chrono::prelude::*;
@@ -14,22 +15,34 @@ use child_hook::Hooks;
 use child_output::Output;
 use child_repeat::Repeat;
 
+/// Child config struct
 #[derive(Debug)]
 pub struct Config {
+    /// command child
     comm: String,
+
+    /// stdout of this child
     pub stdout: Option<Output>,
+
+    /// stderr of this child
     pub stderr: Option<Output>,
+
+    /// repeat feature
     repeat: Option<Repeat>,
+
+    /// hooks
     hooks: Option<Hooks>,
 
+    /// id
     pub child_id: Option<u32>,
+
     pub start_time: Option<DateTime<Local>>,
 }
 
 impl Config {
     pub fn new(comm: String) -> Self {
         Config {
-            comm: comm,
+            comm,
             stdout: None,
             stderr: None,
             child_id: None,
@@ -49,7 +62,9 @@ impl Config {
 
                 result = Self::new(doc["command"].clone().into_string().unwrap());
 
+                // parse output field with Output
                 if let Ok(output) = Output::new(doc["output"].clone()) {
+                    // update stdout and stderr
                     for (field, data) in output {
                         if field == "stdout".to_string() {
                             result.stdout = Some(data);
@@ -59,6 +74,7 @@ impl Config {
                     }
                 }
 
+                // parse repeat feature
                 result.repeat = match Repeat::new(&doc["repeat"]) {
                     Ok(r) => Some(r),
                     Err(e) => {
@@ -69,6 +85,7 @@ impl Config {
                     }
                 };
 
+                // parse hook feature
                 result.hooks = match Hooks::new(&doc["hooks"]) {
                     Ok(h) => Some(h),
                     Err(e) => {
@@ -99,6 +116,7 @@ impl Config {
         }
     }
 
+    // split command and the argvs of command
     pub fn split_args(&self) -> (String, Option<String>) {
         let split_comm: Vec<_> = self.comm.splitn(2, ' ').collect();
 
@@ -242,7 +260,7 @@ mod tests {
         let _ = dbg!(start_new_child(&mut con));
     }
 
-    //#[test]
+    #[test]
     fn read_hooks() {
         let input0 = "
 command: test

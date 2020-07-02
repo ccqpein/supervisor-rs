@@ -4,14 +4,19 @@ use std::io::{Error as ioError, ErrorKind, Result};
 
 use yaml_rust::Yaml;
 
+/// Hooks struct
+///
+/// Should looks like:
+///
+/// ```yaml
+/// hooks:
+///   - prehook: start child
+///   - posthook: start child2
+/// ```
 #[derive(Debug)]
 pub struct Hooks {
     hook_table: HashMap<String, String>,
 }
-
-//hooks:
-//  - prehook: start child
-//  - posthook: start child2
 
 impl Hooks {
     pub fn new_empty() -> Self {
@@ -58,6 +63,7 @@ impl Hooks {
         self.hook_table.get(key)
     }
 
+    /// Get ["command", "child name"] by inputting prehook/posthook as key
     pub fn get_hook_detail(&self, key: &String) -> Option<Vec<String>> {
         if let Some(hook_comm) = self.get(key) {
             return Some(

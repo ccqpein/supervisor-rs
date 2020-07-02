@@ -2,6 +2,7 @@ use std::fmt;
 use std::io::{Error as ioError, ErrorKind, Result};
 use yaml_rust::Yaml;
 
+/// Repeat struct including the action and seconds
 #[derive(Debug, Clone)]
 pub struct Repeat {
     pub action: String,
@@ -16,6 +17,7 @@ impl Repeat {
         }
     }
 
+    /// make new Repeat with yaml
     pub fn new(input: &Yaml) -> Result<Self> {
         let mut result = Repeat {
             action: String::from("restart"),
