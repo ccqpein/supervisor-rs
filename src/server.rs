@@ -19,35 +19,45 @@ use yaml_rust::YamlLoader;
 
 use std::sync::{Arc, Mutex};
 
+/// Server config
 #[derive(Debug)]
 struct ServerConfig {
-    // path for all children's configs
+    /// paths for all children's configs
     load_paths: Vec<String>,
 
-    // startup mode
+    /// startup mode
     mode: String,
+
+    /// The list of children want to start up with server
     startup_list: Option<Vec<String>>,
 
-    // client public keys location
+    /// encrypt mode
+    /// + half
+    /// + full
+    /// + quiet (default)
     encrypt_mode: String,
+
+    /// client public keys location
     keys_path: Option<Vec<String>>,
 }
 
 impl ServerConfig {
-    fn load(filename: &str) -> Result<Self> {
-        let mut contents = File::open(filename)?;
+    /// load server config
+    fn load(filepath: &str) -> Result<Self> {
+        let mut contents = File::open(filepath)?;
         let mut string_result = String::new();
 
         contents.read_to_string(&mut string_result)?;
         Self::read_from_str(string_result.as_str())
     }
 
+    /// read content of config file then making config
     fn read_from_str(input: &str) -> Result<Self> {
         let temp = YamlLoader::load_from_str(input);
         let mut result: Self = ServerConfig {
             load_paths: vec![],
 
-            //quiet mode is default value now
+            // quiet mode is default value now
             mode: "quiet".to_string(),
             startup_list: None,
 
@@ -110,9 +120,9 @@ impl ServerConfig {
         Ok(result)
     }
 
-    // when mode == "half"
-    // it should return all children details those in loadpaths also...
-    // in startup field of server config.
+    /// when mode == "half"
+    /// it should return all children details those in loadpaths also
+    /// in startup field of server config.
     fn half_mode(&self) -> Result<Vec<(String, String)>> {
         let children_set = match &self.startup_list {
             Some(startups) => startups.iter().collect::<HashSet<&String>>(),
@@ -129,7 +139,7 @@ impl ServerConfig {
         Ok(result)
     }
 
-    // return vec of (filename, path)
+    /// Return all children configs. Vec of (filename, path)
     fn all_ymls_in_load_path(&self) -> Result<Vec<(String, String)>> {
         let mut result: Vec<(String, String)> = vec![];
         for path in self.load_paths.clone() {
@@ -155,7 +165,7 @@ impl ServerConfig {
         Ok(result)
     }
 
-    //return whole path of file which match filename
+    /// Return config which match filename
     fn find_config_by_name(&self, filename: &String) -> Result<Config> {
         for path in self.load_paths.clone() {
             for entry in fs::read_dir(path)? {
@@ -185,7 +195,7 @@ impl ServerConfig {
         ))
     }
 
-    // return key's path
+    /// Return key's path
     fn find_pubkey_by_name(&self, filename: &String) -> Result<String> {
         if let Some(paths) = &self.keys_path {
             for path in paths {
@@ -221,6 +231,7 @@ impl ServerConfig {
         ))
     }
 
+    /// recursive check if config have dead loop prehook call
     fn recursive_check(
         &self,
         start: &Config,
@@ -228,20 +239,26 @@ impl ServerConfig {
         chain: &mut Vec<(String, String)>,
     ) -> bool {
         if let Some(hook) = start.get_hook_detail(&String::from("prehook")) {
+            // if hashset already has this child in set, return wrong
             if set.contains(&hook[1]) {
                 return false;
             }
+
+            // Get prehook child's config
             if let Ok(next_config) = self.find_config_by_name(&hook[1]) {
+                // insert in set
                 set.insert(hook[1].clone());
+                // push this one in call_chain
                 chain.push((hook[0].clone(), hook[1].clone()));
+                // keep checking
                 return self.recursive_check(&next_config, set, chain);
             }
-            return false; //if hook child not exsit
+            return false; // if hook child not exsit
         }
-        true //test fine
+        true // test fine
     }
 
-    // Get config prehook details, find them one by one make sure no circle inside
+    /// Get config prehook details, find them one by one make sure no circle inside
     fn pre_hook_check(
         &self,
         name: &String,
@@ -250,7 +267,7 @@ impl ServerConfig {
         let mut call_set = HashSet::new();
         let mut call_chain = vec![]; // chain including (command, name)
 
-        //put this
+        // put this
         call_set.insert(name.clone());
 
         if self.recursive_check(start, &mut call_set, &mut call_chain) {
@@ -260,7 +277,7 @@ impl ServerConfig {
         }
     }
 
-    //generate call chain used by KG to handle prehooks
+    /// generate call chain used by KG to handle prehooks
     fn call_chain_combine(
         &self,
         call_chain: Vec<(String, String)>,
@@ -279,8 +296,8 @@ impl ServerConfig {
     }
 }
 
-// start a child processing, and give child_handle
-// side effection: config.child_id be updated
+/// start a child processing, and give child_handle
+/// side effection: config.child_id be updated
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
@@ -293,7 +310,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
         _ => (),
     };
 
-    //setting stdout and stderr file path
+    // setting stdout and stderr file path
     match &config.stdout {
         Some(out) => {
             match out.mode {
@@ -344,6 +361,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     };
 }
 
+/// check if child name is legal or not
 fn child_name_legal_check(s: &str) -> core::result::Result<(), String> {
     if s == "all" || s == "on" {
         return Err(format!(
@@ -361,23 +379,24 @@ fn child_name_legal_check(s: &str) -> core::result::Result<(), String> {
     Ok(())
 }
 
-// Receive server config and start a new server
-// new server including:
-// 1. a way receive command from client //move to start_deamon
-// 2. first start will start all children in config path
-// 3. then keep listening commands and can restart each of them //move to start deamon
+/// Receive server config and start a new server
+/// new server including:
+/// 1. a way receive command from client //move to start_deamon
+/// 2. first start will start all children in config path
+/// 3. then keep listening commands and can restart each of them //move to start deamon
 pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
-    //Read server's config file
+    // Read server's config file
     let server_conf = if config_path == "" {
         ServerConfig::load("/tmp/server.yml")?
     } else {
         ServerConfig::load(config_path)?
     };
 
-    //create new kindergarten
+    // create new kindergarten
     let mut kindergarten = Kindergarten::new();
 
     // store server config location
+    // after this, server_config_path should never changed
     kindergarten.server_config_path = config_path.to_string();
 
     // kindergarden make encrypt on
@@ -392,7 +411,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
         "quiet" | _ => vec![],
     };
 
-    //print log
+    // print log
     if startup_children.len() != 0 {
         println!(
             "{}",
@@ -406,12 +425,12 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
         );
     }
 
-    //start children with server
+    // start children with server
     for conf in startup_children {
-        //legal check child name
-        //because client already check when it makes command...
-        //..., however, server un-quiet mode won't through client command check.
-        //so we need check again here.
+        // legal check child name
+        // because client already check when it makes command...
+        // ..., however, server un-quiet mode won't through client command check.
+        // so we need check again here.
         if let Err(e) = child_name_legal_check(&conf.0) {
             println!("{}", logger::timelog(&e));
             continue;
@@ -434,7 +453,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
             )
         };
 
-        //because repeat function need kindergarden be created.
+        // because repeat function need kindergarden be created.
         if child_config.has_hook() {
             println!(
                 "{}",
@@ -445,20 +464,20 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
             )
         };
 
-        //registe id
+        // registe id
         let id = child_config.child_id.unwrap();
         kindergarten.register_id(id, child_handle, child_config);
-        //regist name
+        // regist name
         kindergarten.register_name(&conf.0, id);
     }
 
     Ok(kindergarten)
 }
 
-//start a listener for client commands
-//keep taking care children
+/// start a listener for client commands
+/// keep taking care children
 pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, String)>) -> Result<()> {
-    //start TCP listener to receive client commands
+    // start TCP listener to receive client commands
     let listener = TcpListener::bind(format!("{}:{}", "0.0.0.0", 33889))?;
 
     for stream in listener.incoming() {
@@ -470,9 +489,9 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
                     //run handle_client and catch error if has
                     match handle_client(stream, this_kg) {
                         Err(e) => {
-                            //hard check if it is suicide operation, because I only care this message so far.
-                            //this operation isn't in handle_client because it has make sure return to client..
-                            //..first
+                            // hard check if it is suicide operation, because I only care this message so far.
+                            // this operation isn't in handle_client because it has make sure return to client..
+                            // ..first
                             let (first, second) = {
                                 let s = e.to_string();
                                 let (f, ss) = s.split_at(12);
@@ -499,7 +518,7 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
     Ok(())
 }
 
-//get client TCP stream and send to channel
+/// get client TCP stream and send to channel
 fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
     let mut buf = [0; 100 + 4096]; // 100 command length + 4096 key length buffer
     stream.read(&mut buf)?;
@@ -526,7 +545,7 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
             ServerConfig::load(&kig.lock().unwrap().server_config_path)?
         };
 
-        // parse keyname and data
+        // parse keyname and encrypted data
         let (keyname, data) = match DataWrapper::unwrap_from(&buf_vec) {
             Ok((n, d)) => (n, d),
             Err(e) => {
@@ -577,15 +596,13 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
     }
 }
 
-//check all children are fine or not
-//if not fine, try to restart them
-//need channel input to update kindergarten
+/// day care is major function of server handle commands
 pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
     let mut kg = kig.lock().unwrap();
 
-    //run check around here, clean all stopped children
-    //check operation has its own check_around too, check_around here..
-    //..for other operations.
+    // run check around here, clean all stopped children
+    // check operation has its own check_around too,
+    // check_around here for other operations.
     kg.check_around()?;
 
     let command = client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())?;
@@ -593,7 +610,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
     match command.get_ops() {
         client::Ops::Restart => {
             let name = command.child_name.as_ref().unwrap();
-            //check name
+            // check name
             if let Err(e) = child_name_legal_check(name) {
                 return Err(ioError::new(ErrorKind::InvalidInput, e));
             }
@@ -606,7 +623,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
             let mut conf = server_conf.find_config_by_name(name)?;
 
-            //check prehook here
+            // check prehook here
             let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
             if !pre_hook_result.0 {
                 return Err(ioError::new(
@@ -618,14 +635,14 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ));
             } else {
                 let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
-                //reverse call chain
+                // reverse call chain
                 pre_hook_combine.reverse();
                 kg.handle_pre_hook(pre_hook_combine)?;
             }
 
             match kg.restart(name, &mut conf) {
                 Ok(_) => {
-                    //repeat here
+                    // repeat here
                     let repeat_meg = if conf.is_repeat() {
                         repeat(conf, Arc::clone(&kig), name.clone())
                     } else {
@@ -665,10 +682,10 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ServerConfig::load(&kg.server_config_path)?
             };
 
-            //read this child's config
+            // read this child's config
             let mut conf = server_conf.find_config_by_name(&name)?;
 
-            //check prehook here
+            // check prehook here
             let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
             let mut pre_hook_msg = String::new();
             if !pre_hook_result.0 {
@@ -681,7 +698,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ));
             } else {
                 let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
-                //reverse call chain
+                // reverse call chain
                 if pre_hook_combine.len() != 0 {
                     pre_hook_combine.reverse();
                     kg.handle_pre_hook(pre_hook_combine)?;
@@ -691,7 +708,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
             match kg.start(name, &mut conf) {
                 Ok(_) => {
-                    //repeat here
+                    // repeat here
                     let repeat_meg = if conf.is_repeat() {
                         repeat(conf, Arc::clone(&kig), name.clone())
                     } else {
@@ -734,9 +751,9 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             }
         }
 
-        //try start will force start child:
-        //if it is running, call restart.
-        //if it has stopped for some reason, start it
+        // try start will force start child:
+        // if it is running, call restart.
+        // if it has stopped for some reason, start it
         client::Ops::TryStart => {
             let mut resp = String::new();
 
@@ -853,14 +870,14 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
     }
 }
 
-//receive child config, KG, and filename of child config, repeat function
+/// receive child config, KG, and filename of child config, repeat function
 fn repeat(conf: Config, kig: Arc<Mutex<Kindergarten>>, name: String) -> String {
-    //clone locked val to timer
+    // clone locked val to timer
     let timer_lock_val = Arc::clone(&kig);
     let next_time = conf.to_duration().unwrap();
     let comm = conf.repeat_command().unwrap().clone();
 
-    //give a timer
+    // give a timer
     thread::spawn(move || {
         Timer::new_from_conf(name, conf)
             .unwrap()

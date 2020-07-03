@@ -5,6 +5,7 @@ use std::io::prelude::*;
 use std::io::{Error, ErrorKind, Result};
 use std::path::Path;
 
+/// data wrapper including key_name, key_path, and decrypted data inside
 #[derive(Debug, PartialEq)]
 pub struct DataWrapper {
     key_name: String,
@@ -24,15 +25,15 @@ impl DataWrapper {
         };
 
         Ok(DataWrapper {
-            key_name: key_name,
+            key_name,
             key_path: Some(kpath.to_string()),
             data: data.to_string(),
         })
     }
 
-    // for server, receive data and parse to (keyname, true data)
+    /// For server, receive data and parse to (keyname, encrypted data)
     pub fn unwrap_from(s: &[u8]) -> Result<(String, &[u8])> {
-        // clean ";"
+        // clean ";", which is 59
         let cache: Vec<&[u8]> = s.splitn(2, |num| *num == 59).collect();
 
         if cache.len() == 1 {
@@ -59,6 +60,7 @@ impl DataWrapper {
         Ok((key_name, cache[1]))
     }
 
+    /// decrypt
     pub fn decrypt_with_pubkey<T: HasPublic>(
         data: &[u8],
         keyname: String,
@@ -77,10 +79,11 @@ impl DataWrapper {
         Ok(Self {
             key_name: keyname,
             key_path: None,
-            data: data,
+            data,
         })
     }
 
+    /// encrypt
     fn encrypt_with_prikey<T: HasPrivate>(&self, prikey: Rsa<T>) -> Result<Vec<u8>> {
         let mut temp = vec![0; prikey.size() as usize];
 
@@ -92,7 +95,7 @@ impl DataWrapper {
         Ok(result)
     }
 
-    // keyname + ';' + encrypt data
+    /// keyname + ';' + encrypt data
     pub fn encrypt_to_bytes(&self) -> Result<Vec<u8>> {
         let path = match &self.key_path {
             Some(p) => p,
@@ -129,6 +132,28 @@ mod tests {
         // after server recieve
         let b = DataWrapper::decrypt_with_pubkey(dd, keyname, rsa).unwrap();
         assert_eq!(data, b.data)
+    }
+
+    #[test] // test this under root directory of supervisor-rs
+    fn read_form_real_keypairs_test() {
+        let data = "foobar";
+
+        // client side
+        let client_side_data = DataWrapper::new("./test/pri.pem", data)
+            .unwrap()
+            .encrypt_to_bytes()
+            .unwrap();
+
+        // server side
+        let (keyname, dd) = DataWrapper::unwrap_from(&client_side_data).unwrap();
+        let mut pub_key = String::new();
+        let _ = File::open("./test/pubkey/pub.pem")
+            .unwrap()
+            .read_to_string(&mut pub_key);
+        let pub_key = Rsa::public_key_from_pem(&pub_key.as_bytes()).unwrap();
+        let b = DataWrapper::decrypt_with_pubkey(dd, keyname, pub_key).unwrap();
+
+        assert_eq!(b.data, data);
     }
 
     #[test]

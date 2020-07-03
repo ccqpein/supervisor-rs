@@ -2,6 +2,17 @@ use super::keys_handler::DataWrapper;
 use std::io::{Error, ErrorKind, Result};
 use std::str;
 
+/// Client operations
+///
+/// All operations:
+///
+/// + Restart,
+/// + Stop,
+/// + Start,
+/// + TryStart,
+/// + Help,
+/// + Kill,
+/// + Check,
 #[derive(Debug, PartialEq, Clone)]
 pub enum Ops {
     Restart,
@@ -15,7 +26,6 @@ pub enum Ops {
     Check,
 }
 
-//Ops is struct of operations of client commands
 impl Ops {
     fn from_str(s: &str) -> Result<Self> {
         match s {
@@ -102,6 +112,7 @@ impl Prepositions {
     }
 }
 
+/// Command struct of client using to talk to server side
 #[derive(Debug, PartialEq)]
 pub struct Command {
     op: Ops,
@@ -113,7 +124,7 @@ pub struct Command {
 impl Command {
     pub fn new(op: Ops) -> Self {
         Command {
-            op: op,
+            op,
             child_name: None,
             prep: None,
             obj: None,
@@ -124,6 +135,7 @@ impl Command {
         Self::new_from_str(s.iter().map(|x| x.as_str()).collect())
     }
 
+    /// major parse function of command
     pub fn new_from_str(mut s: Vec<&str>) -> Result<Self> {
         // get op
         let mut re = Self::new(Ops::from_str(s[0])?);
