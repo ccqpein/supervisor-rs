@@ -87,6 +87,7 @@ fn main() {
             Ok(s) => _streams.push(s),
             Err(e) => {
                 println!("error of 127.0.0.1: {}; {}", e, CANNOT_REACH_SERVER_ERROR);
+                println!("maybe you are listening on ipv6 ::1?");
                 return;
             }
         }

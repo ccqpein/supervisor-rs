@@ -39,6 +39,17 @@ struct ServerConfig {
 
     /// client public keys location
     keys_path: Option<Vec<String>>,
+
+    /// Listener address
+    /// default is 0.0.0.0, ipv4
+    listener_addr: String,
+
+    /// Enable ipv6 or not, only used when listener_addr
+    /// isn't given in yaml file. If listener_addr appears in yaml,
+    /// this field doesn't matter.
+    /// If listener_addr isn't given and this field is true,
+    /// listener_addr will become ::
+    ipv6: bool,
 }
 
 impl ServerConfig {
@@ -63,6 +74,9 @@ impl ServerConfig {
 
             encrypt_mode: "off".to_string(),
             keys_path: None,
+
+            listener_addr: "0.0.0.0".to_string(),
+            ipv6: false,
         };
 
         match temp {
@@ -75,7 +89,7 @@ impl ServerConfig {
                         .iter()
                         .map(|x| x.clone().into_string().unwrap())
                         .collect::<Vec<String>>(),
-                    None => return Ok(result),
+                    None => vec![],
                 };
                 result.load_paths = paths;
 
@@ -114,6 +128,26 @@ impl ServerConfig {
                     None => None,
                 };
                 result.keys_path = keys_paths;
+
+                // ipv6
+                let p6 = match doc["ipv6"].as_bool() {
+                    Some(b) => b,
+                    None => false,
+                };
+                result.ipv6 = p6;
+
+                // listener part
+                let listener_addr = match doc["listener_addr"].as_str() {
+                    Some(addr) => addr.to_string(),
+                    None => {
+                        if !p6 {
+                            "0.0.0.0".to_string()
+                        } else {
+                            "::".to_string()
+                        }
+                    }
+                };
+                result.listener_addr = listener_addr;
             }
             Err(e) => return Err(ioError::new(ErrorKind::Other, e)),
         }
@@ -442,7 +476,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 
         println!("{}", logger::timelog(&format!("start {} success", conf.0)));
 
-        //because repeat function need kindergarden be created.
+        // because repeat function need kindergarden be created.
         if child_config.is_repeat() {
             println!(
                 "{}",
@@ -477,8 +511,15 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
 /// start a listener for client commands
 /// keep taking care children
 pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, String)>) -> Result<()> {
+    // re-read server config
+    let server_conf = if safe_kg.lock().unwrap().server_config_path == "" {
+        ServerConfig::load("/tmp/server.yml")?
+    } else {
+        ServerConfig::load(&safe_kg.lock().unwrap().server_config_path)?
+    };
+
     // start TCP listener to receive client commands
-    let listener = TcpListener::bind(format!("{}:{}", "0.0.0.0", 33889))?;
+    let listener = TcpListener::bind((server_conf.listener_addr, 33889)).unwrap();
 
     for stream in listener.incoming() {
         match stream {
@@ -607,6 +648,12 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
     let command = client::Command::new_from_str(data.as_str().split(' ').collect::<Vec<&str>>())?;
 
+    let server_conf = if kg.server_config_path == "" {
+        ServerConfig::load("/tmp/server.yml")?
+    } else {
+        ServerConfig::load(&kg.server_config_path)?
+    };
+
     match command.get_ops() {
         client::Ops::Restart => {
             let name = command.child_name.as_ref().unwrap();
@@ -614,12 +661,6 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             if let Err(e) = child_name_legal_check(name) {
                 return Err(ioError::new(ErrorKind::InvalidInput, e));
             }
-
-            let server_conf = if kg.server_config_path == "" {
-                ServerConfig::load("/tmp/server.yml")?
-            } else {
-                ServerConfig::load(&kg.server_config_path)?
-            };
 
             let mut conf = server_conf.find_config_by_name(name)?;
 
@@ -676,12 +717,6 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 ));
             }
 
-            let server_conf = if kg.server_config_path == "" {
-                ServerConfig::load("/tmp/server.yml")?
-            } else {
-                ServerConfig::load(&kg.server_config_path)?
-            };
-
             // read this child's config
             let mut conf = server_conf.find_config_by_name(&name)?;
 
@@ -737,7 +772,21 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             match kg.stop(command.child_name.as_ref().unwrap()) {
                 Ok(_) => {
                     if let Some(post_hook_command) = post_hook {
-                        let mut stream = TcpStream::connect("127.0.0.1:33889")?;
+                        // connect to supervisor itself
+                        let mut stream = TcpStream::connect((
+                            match server_conf.listener_addr.as_str() {
+                                // listen "::" means connect to ::1
+                                "::" => "::1".to_string(),
+
+                                // listen "0.0.0.0" means connect to 127.0.0.1
+                                "0.0.0.0" => "127.0.0.1".to_string(),
+
+                                // other address
+                                x => x.to_string(),
+                            },
+                            33889,
+                        ))?;
+
                         stream.write_all(post_hook_command.as_bytes())?;
                         stream.flush()?;
                     }
@@ -774,7 +823,21 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 match kg.stop(name) {
                     Ok(_) => {
                         if let Some(post_hook_command) = post_hook {
-                            let mut stream = TcpStream::connect("127.0.0.1:33889")?;
+                            // connect to supervisor itself
+                            let mut stream = TcpStream::connect((
+                                match server_conf.listener_addr.as_str() {
+                                    // listen "::" means connect to ::1
+                                    "::" => "::1".to_string(),
+
+                                    // listen "0.0.0.0" means connect to 127.0.0.1
+                                    "0.0.0.0" => "127.0.0.1".to_string(),
+
+                                    // other address
+                                    x => x.to_string(),
+                                },
+                                33889,
+                            ))?;
+
                             stream.write_all(post_hook_command.as_bytes())?;
                             stream.flush()?;
                             resp.push_str(&format!(
@@ -795,13 +858,6 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                     }
                 }
             }
-
-            //start it again, same as Ops::Start branch
-            let server_conf = if kg.server_config_path == "" {
-                ServerConfig::load("/tmp/server.yml")?
-            } else {
-                ServerConfig::load(&kg.server_config_path)?
-            };
 
             let mut conf = server_conf.find_config_by_name(name)?;
 
