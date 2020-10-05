@@ -227,6 +227,36 @@ hooks:
   - posthook: start child
 ```
 
+### Custom Listener address & IPV6 support ###
+
+If you want to use specifically listener IP address instead of `0.0.0.0` (default listener address), you can easily put `listener_addr` field in your server side config yaml file. 
+
+Example:
+
+```yaml
+#server side config
+loadpaths:
+  - /tmp/client/
+  - /tmp/second/path
+
+listener_addr: "127.0.0.1" # only listen local
+```
+
+If you want use IPV6 instead of IPV4, you can just change `listener_addr` to IPV6 address you want. Or just turn `ipv6` field to `true`.
+
+Example:
+
+```yaml
+#server side config
+loadpaths:
+  - /tmp/client/
+  - /tmp/second/path
+
+listener_addr: "::1" # only listen local ipv6
+```
+
+`ipv6` field only used when there is **no** `listener_addr` given, or `supervisor-rs` server side will ignore `ipv6`. If there is no `listener_addr` given, and `ipv6` is true, `supervisor-rs` will start with listen ipv6 address `::`.
+
 ### What if accident happens ###
 
 * if supervisor-rs be killed by `kill`, children won't stop, they will be taken by system.
