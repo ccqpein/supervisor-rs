@@ -126,6 +126,8 @@ On client side, just run `supervisor-rs-client restart child0 on 198.0.0.2 on 19
 
 Then supervisor will go find key file has named `keyname1`. As flexible as you can change child config after supervisor start, you can also put public key files in `pub_keys_path` while supervisor is running.
 
+**CAUTION:** you can only has one `with /bla/bla/key.pem` in each command.
+
 **Make keypairs**
 
 Step 1: Make private key
