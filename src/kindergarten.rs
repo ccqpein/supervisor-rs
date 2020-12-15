@@ -275,4 +275,9 @@ config detail:
             Ok(res)
         }
     }
+
+    /// Get all running children names
+    pub fn all_running_children(&self) -> Vec<String> {
+        self.name_list.keys().cloned().collect()
+    }
 }

@@ -80,14 +80,14 @@ fn main() {
     };
 
     if streams.len() == 0 {
-        //if don't have prep, give local address
+        // If don't have prep, give local address (ipv4)
         let mut _streams: Vec<TcpStream> = vec![];
         let sock = SocketAddr::new("127.0.0.1".parse::<IpAddr>().unwrap(), 33889);
         match TcpStream::connect_timeout(&sock, Duration::new(5, 0)) {
             Ok(s) => _streams.push(s),
             Err(e) => {
                 println!("error of 127.0.0.1: {}; {}", e, CANNOT_REACH_SERVER_ERROR);
-                println!("maybe you are listening on ipv6 ::1?");
+                println!("Maybe you are listening on ipv6? try to use ::1 as host");
                 return;
             }
         }

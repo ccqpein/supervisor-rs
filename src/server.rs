@@ -26,15 +26,15 @@ struct ServerConfig {
     load_paths: Vec<String>,
 
     /// startup mode
+    /// + half
+    /// + full
+    /// + quiet (default)
     mode: String,
 
     /// The list of children want to start up with server
     startup_list: Option<Vec<String>>,
 
     /// encrypt mode
-    /// + half
-    /// + full
-    /// + quiet (default)
     encrypt_mode: String,
 
     /// client public keys location
@@ -917,6 +917,8 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             kg.check_status(command.child_name.as_ref().unwrap_or(&String::new()))
         }
 
+        client::Ops::Info => server_info(server_conf, &kg, command.child_name.as_ref()),
+
         _ => {
             return Err(ioError::new(
                 ErrorKind::InvalidInput,
@@ -940,4 +942,41 @@ fn repeat(conf: Config, kig: Arc<Mutex<Kindergarten>>, name: String) -> String {
             .run(timer_lock_val)
     });
     format!(", and it will {} in {:?}", comm, next_time)
+}
+
+/// Server apply info of itself to client
+fn server_info(config: ServerConfig, kg: &Kindergarten, name: Option<&String>) -> Result<String> {
+    let name = name.map_or("all", |n| n.as_str());
+
+    let mut resp = String::from("==Server Info Below==\n");
+    match name {
+        //:= TODO: maybe more in future
+        "all" => {
+            // server config path
+            resp.push_str("Server config path:\n");
+            resp.push_str(&kg.server_config_path);
+            resp.push_str("\n");
+
+            // children name are running
+            resp.push_str("Children are running (use 'check' command to see child detail):\n");
+            let mut s = String::from("[");
+            kg.all_running_children().iter().for_each(|name| {
+                s.push_str(name);
+                s.push_str(" ");
+            });
+            resp.push_str(&s);
+            resp.push_str("]");
+            resp.push_str("\n");
+
+            // server configs
+            // load paths
+            resp.push_str("Server configs:\n");
+            resp.push_str(&format!("Load paths: {:?}\n", config.load_paths));
+            resp.push_str(&format!("Encrypt mode: {:?}\n", config.encrypt_mode));
+        }
+        _ => {}
+    }
+
+    resp.push_str("=======================\n");
+    Ok(resp)
 }

@@ -85,7 +85,7 @@ run server with special config file:
 
 After version `0.6` command upper equal with `supervisor-rs-client restart child0 on 198.0.0.2 on 198.0.0.3`
 
-child name is not must for `check`/`kill` commands.
+child name is not must for `check`/`kill`/`info` commands.
 
 commands:
 
@@ -97,6 +97,7 @@ commands:
 | check    | return summary of all children who are **running**. If children are not running, no matter what reason, they will be cleaned from kindergarden's table.                                                                                                                                    |
 | trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
 | kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
+| info     | get general information of server self                                                                                                                                                                                                                                                     |
 
 ### Use key pairs authenticate clients ###
 

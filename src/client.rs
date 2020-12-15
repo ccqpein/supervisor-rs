@@ -21,6 +21,7 @@ pub enum Ops {
     TryStart,
 
     Help,
+    Info,
 
     Kill,
     Check,
@@ -35,6 +36,7 @@ impl Ops {
             "Check" | "check" => return Ok(Ops::Check),
             "Kill" | "kill" => return Ok(Ops::Kill),
             "TryStart" | "Trystart" | "trystart" => return Ok(Ops::TryStart),
+            "Info" | "INFO" | "InFo" | "info" => Ok(Ops::Info),
             "Help" | "help" | "-h" => return Ok(Ops::Help),
             _ => {
                 return Err(Error::new(
@@ -54,6 +56,7 @@ impl Ops {
             Ops::Kill => return "kill".to_string(),
             Ops::TryStart => return "trystart".to_string(),
             Ops::Help => return "help".to_string(),
+            Ops::Info => return "info".to_string(),
         }
     }
 
@@ -141,7 +144,7 @@ impl Command {
         let mut re = Self::new(Ops::from_str(s[0])?);
 
         // kill and check do not have to have child name
-        if re.op == Ops::Kill || re.op == Ops::Check {
+        if re.op == Ops::Kill || re.op == Ops::Check || re.op == Ops::Info {
             s.drain(..1); // delete ops
             if s.len() >= 1 && !Prepositions::is_prep(s[0]) {
                 // has child name
@@ -273,7 +276,6 @@ impl Command {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::error::Error;
 
     #[test]
     fn check_child_name() {
@@ -281,14 +283,14 @@ mod tests {
         let comm = Command::new_from_str(case0);
         assert!(comm.is_err());
         assert_eq!(
-            comm.err().unwrap().description(),
+            comm.err().unwrap().to_string(),
             "child name cannot be command"
         );
     }
 
     #[test]
     fn check_parser() {
-        let mut case0 = vec![
+        let case0 = vec![
             "restart", "child", "with", "key", "on", "host", "on", "host1",
         ];
         assert_eq!(
@@ -306,7 +308,7 @@ mod tests {
         );
 
         // test2
-        let mut case1 = vec!["restart", "child", "with", "key", "on", "host1, host2"]; // second hosts format
+        let case1 = vec!["restart", "child", "with", "key", "on", "host1, host2"]; // second hosts format
         assert_eq!(
             Command {
                 op: Ops::Restart,
@@ -331,7 +333,7 @@ mod tests {
 
     #[test]
     fn check_generate_encrypt_wapper() -> Result<()> {
-        let mut case0 = vec![
+        let case0 = vec![
             "start",
             "child",
             "with",
