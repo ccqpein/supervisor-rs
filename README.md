@@ -4,11 +4,11 @@
 
 **Features**:
 
-+ start different processing depend on particular yaml file when startup
-+ start processing when have new config in load path
-+ startup with particular server config
-+ restart processing
-+ stop processing
++ Start different processing depend on particular yaml file when startup
++ Start processing when have new config in load path
++ Startup with particular server config
++ Restart processing
++ Stop processing
 
 **Design**:
 
@@ -18,18 +18,40 @@
 
 **Config yaml files format**:
 
-server.yaml:
+Example of server.yaml:
 
 ```yaml
-#server side config
+# server side config
 loadpaths:
   - /tmp/client/
   - /tmp/second/path
   
-mode: "full"
+mode: "half"
+startup:
+  - child1
+  - child2
+  
+encrypt: on
+pub_keys_path:
+  - vault1
+  - vault2
+
+#ipv6: true
+listener_addr: 127.0.0.1
 ```
 
-each command's config:
+| Fields        | Usage                                                                                                                                                                  |
+|:-------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
+| loadpaths     | List of paths of all children config files.                                                                                                                            |
+| mode          | Startup mode. Values can be "quiet", "half", or "full"                                                                                                                 |
+| startup       | When the `mode` is "half", children in this list will start                                                                                                            |
+| encrypt       | Encrypt mode. Values can be "on" or "off"                                                                                                                              |
+| pub_keys_path | When encrypt is "on", this field including the list of paths of public keys                                                                                            |
+| listener_addr | Address of server side is listening                                                                                                                                    |
+| ipv6          | Only used when `listener_addr` isn't given. Values can be `true` or `false`. supervisor-rs server side will listen "::" instead of "0.0.0.0" when this field is `true` |
+
+
+Example of child's config yaml:
 
 ```yaml
 #each child config in loadpath of server config
@@ -40,19 +62,27 @@ output:
 
   - stderr: nnnnn
     mode: append
+
+repeat:
+  action: restart
+  seconds: 5
+
+hooks:
+  - prehook: start child
+  - posthook: start child
 ```
 
 ## Usage ##
 
-You can download compiled binary file directly on release tag.
+You can download compiled binary file directly.
 
-You can install from cargo.io, run `cargo install supervisor-rs`. Or you can build it by yourself.
+You can install from cargo.io, run `cargo install supervisor-rs`.
 
 ### Server Side ###
 
-Start server side application. After compiled, run `supervisor-rs-server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config path given, supervisor will going to find `server.yml` in `/tmp`.
+Run `supervisor-rs-server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config path given, supervisor will going to find `server.yml` in `/tmp`.
 
-After server application start, if `mode` is **full**, then all **application yaml files under loadpath of server config** will be ran by application. So, that's means every yaml files in there should be legal application config file, or server cannot start.
+After server application start, if `mode` is **full**, then all **application yaml files under loadpath of server config** will be ran by application. So, that means every yaml files in there should be legal application config file, or server cannot start.
 
 Server side's default mode is `quiet`, means server will record `loadphths`, but won't start children automatically.
 
@@ -60,7 +90,7 @@ Each sub-processing is named with **filename** of yaml file. If have multi-loadp
 
 **Change server's config while runtime**
 
-After server start, config path is strict but the content of config is negotiable. It means you can change what config are, but you cannot change where are it. 
+After server start, config path is strict but the content of config is negotiable. It means you can change what config is, but you cannot change where is it. 
 
 For example, you just want to add a new `loadpaths` to server. You can easily change `loadpaths` in server's config. However, server does not make it change immediately because no necessary. 
 
@@ -85,7 +115,7 @@ run server with special config file:
 
 After version `0.6` command upper equal with `supervisor-rs-client restart child0 on 198.0.0.2 on 198.0.0.3`
 
-child name is not must for `check`/`kill`/`info` commands.
+child name is not have to given for `check`/`kill`/`info` commands.
 
 commands:
 
@@ -101,7 +131,7 @@ commands:
 
 ### Use key pairs authenticate clients ###
 
-When server side turn on encrypt mode, server side will check if data it received can decrypt by public keys in `pub_keys_path`
+When server side `encrypt` mode is on, server side will check if data received can decrypt by public keys in `pub_keys_path`
 
 #### Example: ####
 
@@ -136,7 +166,6 @@ Step 1: Make private key
 
 Remember: key size should less or equal 4096
 
-
 Step 2: Make public key
 `openssl rsa -in private.pem -outform PEM -pubout -out public.pem`
 
@@ -149,7 +178,7 @@ You **cannot** change encrypt mode when supervisor-rs running. But you can modif
 
 ### Startup-with feature ###
 
-If `server's config` mode is `half`, server will try to startup all children in `startup` list when it starts.
+If server's config `mode` is `half`, server will try to startup all children in `startup` list when it starts.
 
 Demo:
 

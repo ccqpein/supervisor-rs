@@ -311,7 +311,7 @@ impl ServerConfig {
         }
     }
 
-    /// generate call chain used by KG to handle prehooks
+    /// Generate call chain used by KG to handle prehooks
     fn call_chain_combine(
         &self,
         call_chain: Vec<(String, String)>,
@@ -330,8 +330,8 @@ impl ServerConfig {
     }
 }
 
-/// start a child processing, and give child_handle
-/// side effection: config.child_id be updated
+/// Start a child processing, and give child_handle
+/// Side effection: config.child_id be updated
 pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
@@ -395,7 +395,7 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     };
 }
 
-/// check if child name is legal or not
+/// Check if child name is legal or not
 fn child_name_legal_check(s: &str) -> core::result::Result<(), String> {
     if s == "all" || s == "on" {
         return Err(format!(
@@ -414,7 +414,7 @@ fn child_name_legal_check(s: &str) -> core::result::Result<(), String> {
 }
 
 /// Receive server config and start a new server
-/// new server including:
+/// New server including:
 /// 1. a way receive command from client //move to start_deamon
 /// 2. first start will start all children in config path
 /// 3. then keep listening commands and can restart each of them //move to start deamon
