@@ -1,6 +1,15 @@
 use super::keys_handler::DataWrapper;
+use ssh2::Session;
+use std::io::prelude::*;
 use std::io::{Error, ErrorKind, Result};
+use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::str;
+use std::time::Duration;
+
+pub const CANNOT_REACH_SERVER_ERROR: &'static str =
+    "Looks like client cannot reach server side, make sure you start supervisor-rs-server on host you want to reach. \
+Maybe it is network problem, or even worse, server app terminated. \
+If server app terminated, all children were running become zombies. Check them out.";
 
 /// Client operations
 ///
@@ -254,7 +263,8 @@ impl Command {
         }
     }
 
-    // ops + ' ' + childname
+    /// ops + ' ' + childname
+    /// and there are no Prepositions and Objects inside
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut cache = self.op.to_string().as_bytes().to_vec();
         if self.child_name.is_some() {
@@ -270,6 +280,114 @@ impl Command {
         }
 
         cache.clone()
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum IpFields<'a> {
+    Normal(IpAddr),
+    SshIp { username: &'a str, ipaddr: IpAddr },
+}
+
+/// ip address parser, support normal ip address and ssh protocol
+pub fn ip_fields_parser<'a>(
+    ip_pair: impl Iterator<Item = &'a (&'a Prepositions, &'a String)>,
+) -> std::result::Result<Vec<IpFields<'a>>, String> {
+    let cache = ip_pair
+        .map(|(_, ip)| ip.split(|x| x == ',' || x == ' ').filter(|x| *x != ""))
+        .flatten();
+
+    let mut result = vec![];
+    for s in cache {
+        if s.starts_with("ssh://") {
+            result.push(ssh_address_parse(s)?);
+        } else {
+            result.push(IpFields::Normal(
+                s.parse::<IpAddr>().map_err(|e| e.to_string())?,
+            ))
+        }
+    }
+    Ok(result)
+}
+
+/// ssh address has to follow 'ssh://username@ipaddress'
+fn ssh_address_parse(address: &str) -> std::result::Result<IpFields<'_>, String> {
+    let mut ll = address
+        .split(|x| x == '/' || x == ':' || x == '@')
+        .filter(|s| *s != "");
+
+    Ok(IpFields::SshIp {
+        username: ll.nth(1).ok_or("Username parse wrong".to_string())?,
+        ipaddr: ll
+            .nth(0)
+            .ok_or("IP address wrong".to_string())?
+            .parse::<IpAddr>()
+            .map_err(|e| e.to_string())?,
+    })
+}
+
+pub enum ConnectionStream {
+    Tcp(TcpStream),
+    Ssh(Session, String),
+}
+
+impl ConnectionStream {
+    /// generate new connections by using IpFields
+    pub fn new(ip: IpFields<'_>) -> std::result::Result<ConnectionStream, String> {
+        match ip {
+            IpFields::Normal(addr) => {
+                let sock = SocketAddr::new(addr, 33889);
+                Ok(Self::Tcp(
+                    TcpStream::connect_timeout(&sock, Duration::new(5, 0))
+                        .map_err(|_| CANNOT_REACH_SERVER_ERROR)?,
+                ))
+            }
+            IpFields::SshIp { username, ipaddr } => {
+                let sock = SocketAddr::new(ipaddr, 22);
+                let tcp = TcpStream::connect_timeout(&sock, Duration::new(5, 0))
+                    .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
+                let mut sess = Session::new().unwrap();
+                sess.set_tcp_stream(tcp);
+                sess.handshake().map_err(|e| e.to_string())?;
+                sess.userauth_agent(username).map_err(|e| e.to_string())?;
+                Ok(Self::Ssh(sess, ipaddr.to_string()))
+            }
+        }
+    }
+
+    /// send command to server during the built streams
+    pub fn send_comm(&mut self, comm: &[u8]) -> Result<String> {
+        match self {
+            ConnectionStream::Tcp(s) => {
+                s.write_all(comm)?;
+
+                s.flush()?;
+
+                let mut response = String::new();
+                s.read_to_string(&mut response)?;
+
+                Ok(response)
+            }
+            ConnectionStream::Ssh(s, _) => {
+                let mut channel = s.channel_session()?;
+                let mut head = "supervisor-rs-client ".to_string();
+                head.push_str(str::from_utf8(comm).unwrap());
+                channel.exec(head.as_str())?;
+
+                let mut response = String::new();
+                channel.read_to_string(&mut response)?;
+
+                channel.wait_close()?;
+                Ok(response)
+            }
+        }
+    }
+
+    pub fn address(&self) -> std::result::Result<String, String> {
+        Ok(match self {
+            ConnectionStream::Tcp(s) => s.peer_addr().map_err(|e| e.to_string())?.to_string(),
+            ConnectionStream::Ssh(_, addr) => addr.clone(),
+        })
     }
 }
 
@@ -354,5 +472,59 @@ mod tests {
         let dw = com0.generate_encrypt_wapper()?;
         assert_eq!(dw, DataWrapper::new("./test/public.pem", "check").unwrap());
         Ok(())
+    }
+
+    #[test]
+    fn test_ip_fields_parser() {
+        let test = vec![
+            (Prepositions::On, "127.0.0.1".to_string()),
+            (Prepositions::On, "127.0.0.2, 127.0.0.3".to_string()),
+            (Prepositions::On, "ssh://hello@127.0.0.1".to_string()),
+            (
+                Prepositions::On,
+                "ssh://hello@127.0.0.1, ssh://hello@127.0.0.2".to_string(),
+            ),
+            (
+                Prepositions::On,
+                "ssh:/wrong@127.0.0.1, ssh://alsowrong127.0.0.2, sssh://jjj@oidde".to_string(),
+            ),
+        ];
+
+        let test0 = test.iter().map(|(ref a, ref b)| (a, b)).collect::<Vec<_>>();
+
+        assert_eq!(
+            ip_fields_parser(vec![test0[0]].iter()),
+            Ok(vec![IpFields::Normal("127.0.0.1".parse().unwrap())]),
+        );
+
+        assert_eq!(
+            ip_fields_parser(vec![test0[1]].iter()),
+            Ok(vec![
+                IpFields::Normal("127.0.0.2".parse().unwrap()),
+                IpFields::Normal("127.0.0.3".parse().unwrap())
+            ]),
+        );
+
+        assert_eq!(
+            ip_fields_parser(vec![test0[2]].iter()),
+            Ok(vec![IpFields::SshIp {
+                username: "hello",
+                ipaddr: "127.0.0.1".parse().unwrap()
+            }]),
+        );
+        assert_eq!(
+            ip_fields_parser(vec![test0[3]].iter()),
+            Ok(vec![
+                IpFields::SshIp {
+                    username: "hello",
+                    ipaddr: "127.0.0.1".parse().unwrap()
+                },
+                IpFields::SshIp {
+                    username: "hello",
+                    ipaddr: "127.0.0.2".parse().unwrap()
+                }
+            ]),
+        );
+        assert!(ip_fields_parser(vec![test0[4]].iter()).is_err());
     }
 }

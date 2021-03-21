@@ -289,6 +289,33 @@ listener_addr: "::1" # only listen local ipv6
 
 `ipv6` field only used when there is **no** `listener_addr` given, or `supervisor-rs` server side will ignore `ipv6`. If there is no `listener_addr` given, and `ipv6` is true, `supervisor-rs` will start with listen ipv6 address `::`.
 
+### SSH-agent tunnel feature ###
+
+Defaultly, `supervisor-rs-server` listens `0.0.0.0` that means all servers those can reach `supervisor-rs-server`'s host can send command to `supervisor-rs-server`. Then we have [key-pair](#use-key-pairs-authenticate-clients) feature for encrypting/authorization of client's identity. 
+
+If we are in inter-network, listen `0.0.0.0` or specific ip addresses doesn't that matter. Firewall and router table can do the job for us. Beside, [key-pair](#use-key-pairs-authenticate-clients) can make sure only some people can send `supervisor-rs-server`.
+
+However. if we deploy in some cloud services, our server open to the weird world. We may don't trust outside, and still want to ssh login host server and do our jobs. This is the reason that why this feature come.
+
+**How to**
+
+**Server Side:**
+
+Don't need any additional configs for turn on this feature. For me, I just change `listener_addr` from `0.0.0.0` to `127.0.0.1` for making sure all outside computer cannot talk to `supervisor-rs-server`.
+
+Also, make sure `supervisor-rs-client` in your server's PATH. If you install `supervisor-rs` by `cargo install supervisor-rs`, I guess you already have it.
+
+**Client Side:**
+
+Assume our `supervisor-rs-server` hosted on `192.168.3.3`. And we can ssh login that server with `ssh -i ~/.ssh/key user@192.168.3.3`
+
+Then:
+
+1. Tell ssh in your computer that `192.168.3.3` use key `~/.ssh/key` (by change `~/.ssh/config`). So you can ssh login without give which key you need to use, like `ssh user@192.168.3.3`
+2. `ssh-add ~/.ssh/key` for adding key in ssh-agent.
+
+After these, you can run `supervisor-rs-client check on ssh://user@192.168.3.3`. Every usages are same, you just need to change host (ip address) field to `ssh://{username}@{hostip}`.
+
 ### What if accident happens ###
 
 * if supervisor-rs be killed by `kill`, children won't stop, they will be taken by system.

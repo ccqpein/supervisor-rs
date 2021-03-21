@@ -519,7 +519,13 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
     };
 
     // start TCP listener to receive client commands
-    let listener = TcpListener::bind((server_conf.listener_addr, 33889)).unwrap();
+    let listener = TcpListener::bind((server_conf.listener_addr.clone(), 33889)).unwrap();
+    println!(
+        "{} {}:{}",
+        logger::timelog("Server is listening on"),
+        server_conf.listener_addr,
+        33889
+    );
 
     for stream in listener.incoming() {
         match stream {
