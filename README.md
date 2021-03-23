@@ -301,7 +301,7 @@ However. if we deploy in some cloud services, our server open to the weird world
 
 **Server Side:**
 
-Don't need any additional configs for turn on this feature. For me, I just change `listener_addr` from `0.0.0.0` to `127.0.0.1` for making sure all outside computer cannot talk to `supervisor-rs-server`.
+Don't need any additional configs for turn on this feature. For me, I just set `listener_addr` to `127.0.0.1` for making sure all outside computer cannot talk to `supervisor-rs-server`.
 
 Also, make sure `supervisor-rs-client` in your server's PATH. If you install `supervisor-rs` by `cargo install supervisor-rs`, I guess you already have it.
 

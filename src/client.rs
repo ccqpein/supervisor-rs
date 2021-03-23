@@ -316,8 +316,12 @@ fn ssh_address_parse(address: &str) -> std::result::Result<IpFields<'_>, String>
         .split(|x| x == '/' || x == ':' || x == '@')
         .filter(|s| *s != "");
 
+    if ll.nth(0).unwrap_or("") != "ssh" {
+        return Err("Only support ssh protocol".to_string());
+    }
+
     Ok(IpFields::SshIp {
-        username: ll.nth(1).ok_or("Username parse wrong".to_string())?,
+        username: ll.nth(0).ok_or("Username parse wrong".to_string())?,
         ipaddr: ll
             .nth(0)
             .ok_or("IP address wrong".to_string())?

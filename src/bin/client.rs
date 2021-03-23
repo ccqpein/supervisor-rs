@@ -55,11 +55,15 @@ fn main() {
 
     if streams.len() == 0 {
         // If don't have prep, give local address (ipv4)
-        streams =
-            vec![
-                ConnectionStream::new(IpFields::Normal(IpAddr::from_str("127.0.0.1").unwrap()))
-                    .unwrap(),
-            ];
+        streams = vec![match ConnectionStream::new(IpFields::Normal(
+            IpAddr::from_str("127.0.0.1").unwrap(),
+        )) {
+            Ok(s) => s,
+            Err(e) => {
+                println!("{}", e.to_string());
+                return;
+            }
+        }];
     }
 
     // Here to check/make encrypt data
