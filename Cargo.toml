@@ -1,8 +1,8 @@
 [package]
 name = "supervisor-rs"
-version = "0.8.2"
+version = "0.8.3"
 authors = ["ccQpein"]
-edition = "2018"
+edition = "2021"
 description = "Manage (Start/Stop/Restart/etc.) processings on server."
 license = "MIT"
 repository = "https://github.com/ccqpein/supervisor-rs"
@@ -11,7 +11,7 @@ readme = "README.md"
 [dependencies]
 yaml-rust = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
-openssl = "0.10.26"
+openssl = "0.10"
 ssh2 = "0.9"
 
 [[bin]]
