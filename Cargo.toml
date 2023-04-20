@@ -1,6 +1,6 @@
 [package]
 name = "supervisor-rs"
-version = "0.8.3"
+version = "0.8.4"
 authors = ["ccQpein"]
 edition = "2021"
 description = "Manage (Start/Stop/Restart/etc.) processings on server."
