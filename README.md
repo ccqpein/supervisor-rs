@@ -2,6 +2,20 @@
 
 `supervisor-rs` used to be a manager of handle application running. `supervisor-rs` can start/restart/stop processing.
 
+- [Usage](#usage)
+  - [Server Side](#server-side)
+  - [Client Side](#client-side)
+  - [Use key pairs authenticate clients](#use-key-pairs-authenticate-clients)
+    - [Example:](#example)
+  - [Startup-with feature](#startup-with-feature)
+  - [Repeat feature](#repeat-feature)
+    - [How to stop repeat](#how-to-stop-repeat)
+  - [Hooks feature](#hooks-feature)
+  - [Custom Listener address & IPV6 support](#custom-listener-address--ipv6-support)
+  - [SSH-agent tunnel feature](#ssh-agent-tunnel-feature)
+  - [What if accident happens](#what-if-accident-happens)
+- [Cross compiling](#cross-compiling)
+
 **Features**:
 
 + Start different processing depend on particular yaml file when startup
