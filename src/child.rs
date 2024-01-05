@@ -8,6 +8,7 @@ use chrono::prelude::*;
 use std::fmt;
 use std::fs::File;
 use std::io::{Error as ioError, ErrorKind, Read, Result};
+use std::path::PathBuf;
 use std::time;
 use yaml_rust::YamlLoader;
 
@@ -18,6 +19,9 @@ use child_repeat::Repeat;
 /// Child config struct
 #[derive(Debug)]
 pub struct Config {
+    /// location of this config
+    pub location_path: String,
+
     /// command child
     comm: String,
 
@@ -42,6 +46,7 @@ pub struct Config {
 impl Config {
     pub fn new(comm: String) -> Self {
         Config {
+            location_path: String::new(),
             comm,
             stdout: None,
             stderr: None,
@@ -103,13 +108,19 @@ impl Config {
         Ok(result)
     }
 
-    pub fn read_from_yaml_file(filename: &str) -> Result<Self> {
-        let contents = File::open(filename);
+    pub fn read_from_yaml_file(filepath: PathBuf) -> Result<Self> {
+        let contents = File::open(filepath.to_str().unwrap().to_string());
         let mut string_result = String::new();
         match contents {
             Ok(mut cont) => {
                 let _ = cont.read_to_string(&mut string_result);
-                return Self::read_from_str(string_result.as_str());
+                Self::read_from_str(string_result.as_str()).map(|mut c| {
+                    c.location_path = filepath
+                        .parent()
+                        .map(|p| p.to_str().unwrap().to_string())
+                        .unwrap_or(String::new());
+                    c
+                })
             }
 
             Err(e) => return Err(ioError::new(ErrorKind::Other, e.to_string().to_string())),
@@ -204,6 +215,7 @@ impl Config {
 impl Clone for Config {
     fn clone(&self) -> Self {
         Config {
+            location_path: self.location_path.clone(),
             comm: self.comm.clone(),
             stdout: self.stdout.clone(),
             stderr: self.stderr.clone(),
@@ -219,7 +231,8 @@ impl fmt::Display for Config {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
-            "  command is: {}\n  stdout is: {}\n  stderr is: {}\n  child id is: {}\n  start time: {:?}\n  repeat is: {}\n  hooks are:\n{}",
+            "  config location is: {}\n  command is: {}\n  stdout is: {}\n  stderr is: {}\n  child id is: {}\n  start time: {:?}\n  repeat is: {}\n  hooks are:\n{}",
+            self.location_path,
             self.comm,
             self.stdout.as_ref().unwrap_or(&Output::new_empty()),
             self.stderr.as_ref().unwrap_or(&Output::new_empty()),
@@ -244,7 +257,7 @@ mod tests {
 
     //#[test]
     fn command_argvs() {
-        let con = dbg!(Config::read_from_yaml_file("./test/argv.yml")).unwrap();
+        let con = dbg!(Config::read_from_yaml_file("./test/argv.yml".into())).unwrap();
         let (comm, argvs) = con.split_args();
         println!("command: {}", comm);
 
@@ -255,7 +268,7 @@ mod tests {
 
     //#[test]
     fn run_ls() {
-        let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml")).unwrap();
+        let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml".into())).unwrap();
 
         let _ = dbg!(start_new_child(&mut con));
     }

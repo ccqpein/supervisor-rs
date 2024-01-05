@@ -108,7 +108,7 @@ After server start, config path is strict but the content of config is negotiabl
 
 For example, you just want to add a new `loadpaths` to server. You can easily change `loadpaths` in server's config. However, server does not make it change immediately because no necessary. 
 
-Then you put a child config inside the `loadpath` you just add, then let it start ([Go to Client Side for usage](#client-side)). Server will re-read configuration and start it.
+Then you put a child config inside the `loadpath` you just add, then let it start ([Go to Client Side for usage](#client-side)). Server will re-read configuration and start it. Every children run in the same path (current path of children processing) that the config located in.
 
 Technically, server only keep configuration path, and read it again when server need to operate children or find key files.
 

@@ -215,7 +215,7 @@ impl ServerConfig {
                                 .to_string()
                                 == *filename
                             {
-                                return Config::read_from_yaml_file(entry.path().to_str().unwrap());
+                                return Config::read_from_yaml_file(entry.path());
                             }
                         }
                     }
@@ -321,7 +321,7 @@ impl ServerConfig {
 
         for (comm, name) in call_chain {
             if let Some(conf_path) = all_child.iter().find(|x| x.0 == name) {
-                if let Ok(conf) = Config::read_from_yaml_file(&conf_path.1) {
+                if let Ok(conf) = Config::read_from_yaml_file((&conf_path.1).into()) {
                     result.push((comm, name, conf));
                 }
             }
@@ -336,6 +336,8 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     let (com, args) = config.split_args();
 
     let mut command = Command::new(&com);
+
+    command.current_dir(config.location_path.clone());
 
     match args {
         Some(arg) => {
@@ -470,7 +472,7 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
             continue;
         };
 
-        let mut child_config = Config::read_from_yaml_file(&conf.1)?;
+        let mut child_config = Config::read_from_yaml_file((&conf.1).into())?;
 
         let child_handle = start_new_child(&mut child_config)?;
 
@@ -956,7 +958,6 @@ fn server_info(config: ServerConfig, kg: &Kindergarten, name: Option<&String>) -
 
     let mut resp = String::from("==Server Info Below==\n");
     match name {
-        //:= TODO: maybe more in future
         "all" => {
             // server config path
             resp.push_str("Server config path:\n");

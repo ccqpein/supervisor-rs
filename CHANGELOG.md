@@ -1,3 +1,10 @@
++ `v0.8.5`
+  - config has its own location path
+  - run the child with `.current_dir` and the **config location path**
+
++ `v0.8.4`
+  - Update README
+  
 + `v0.8.3`
   - Change to Rust 2021
 
