@@ -351,3 +351,27 @@ linker = "x86_64-linux-musl-gcc"
 ```
 
 then, `env CC_x86_64_unknown_linux_musl=x86_64-linux-musl-gcc cargo build --target=x86_64-unknown-linux-musl --release`, there is no errors in my local machine.
+
+## Systemd integration ##
+
+This is the example of `supervisor.service`
+
+```ini
+[Unit]
+Description=supervisor
+After=network.target
+
+[Service]
+TimeoutStartSec=0
+ExecStart=/home/ubuntu/.cargo/bin/supervisor-rs-server /home/ubuntu/supervisor/server.yml
+EnvironmentFile=/home/ubuntu/supervisor/supervisor.conf
+StandardOutput=append:/home/ubuntu/supervisor/log
+StandardError=inherit
+Restart=on-failure
+User=ubuntu
+Group=ubuntu
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target
+```
