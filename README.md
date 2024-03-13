@@ -15,6 +15,7 @@
   - [SSH-agent tunnel feature](#ssh-agent-tunnel-feature)
   - [What if accident happens](#what-if-accident-happens)
 - [Cross compiling](#cross-compiling)
+- [Systemd integration](#systemd-integration)
 
 **Features**:
 
