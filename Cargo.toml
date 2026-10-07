@@ -1,8 +1,8 @@
 [package]
 name = "supervisor-rs"
-version = "0.8.5"
+version = "0.8.6"
 authors = ["ccQpein"]
-edition = "2021"
+edition = "2024"
 description = "Manage (Start/Stop/Restart/etc.) processings on server."
 license = "MIT"
 repository = "https://github.com/ccqpein/supervisor-rs"
