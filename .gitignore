@@ -7,3 +7,4 @@ Cargo.lock
 .DS_Store
 deploy.sh
 test/*
+useful_command.*

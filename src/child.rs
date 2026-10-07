@@ -256,6 +256,7 @@ mod tests {
     use super::*;
 
     //#[test]
+    #[allow(dead_code)]
     fn command_argvs() {
         let con = dbg!(Config::read_from_yaml_file("./test/argv.yml".into())).unwrap();
         let (comm, argvs) = con.split_args();
@@ -267,6 +268,7 @@ mod tests {
     }
 
     //#[test]
+    #[allow(dead_code)]
     fn run_ls() {
         let mut con = dbg!(Config::read_from_yaml_file("./test/ls.yaml".into())).unwrap();
 

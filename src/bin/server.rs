@@ -1,24 +1,15 @@
-use std::env;
+use clap::Parser;
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex};
 use std::thread;
+use supervisor_rs::arg::ServerArgs;
 use supervisor_rs::logger;
 use supervisor_rs::server;
 
 fn main() {
-    let arguments = env::args();
-    let change_2_vec = arguments.collect::<Vec<String>>();
+    let args = ServerArgs::parse();
 
-    if change_2_vec.len() > 2 {
-        println!("{}", "too much arguments, not support yet.");
-        return;
-    }
-
-    let k_result = if change_2_vec.len() != 1 {
-        server::start_new_server(&change_2_vec[1])
-    } else {
-        server::start_new_server("")
-    };
+    let k_result = server::start_new_server(args.config_path());
 
     let k = match k_result {
         Ok(k) => k,

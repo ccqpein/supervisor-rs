@@ -1,23 +1,25 @@
 use std::env;
 use std::net::IpAddr;
 use std::str::FromStr;
+use supervisor_rs::arg::{normalize_client_args, ClientArgs};
 use supervisor_rs::client::*;
 
 fn main() {
-    let arguments = env::args();
-    let change_2_vec = arguments.collect::<Vec<String>>();
-    let cache_command = match Command::new_from_string(change_2_vec[1..].to_vec()) {
+    let normalized = normalize_client_args(env::args());
+    let client_args = match ClientArgs::try_parse_from(normalized) {
+        Ok(args) => args,
+        Err(e) => {
+            e.exit();
+        }
+    };
+
+    let cache_command = match client_args.to_command() {
         Ok(c) => c,
         Err(e) => {
             println!("error: {}", e);
             return;
         }
     };
-
-    if let Ops::Help = cache_command.get_ops() {
-        println!("{}", help());
-        return;
-    }
 
     // build streams, parse all host
     let mut streams: Vec<ConnectionStream> = {
@@ -81,30 +83,6 @@ fn main() {
             stream.send_comm(&data_2_server).unwrap()
         );
     }
-}
-
-fn help() -> String {
-    String::from(
-        "\
-Supervisor-rs used to manage precessings on server
-
-supervisor-rs-server running on server side.
-supervisor-rs-client used to send command to server side.
-
-Example:
-
-supervisor-rs-client start child1
-
-supervisor-rs-client restart child1 on 192.168.1.1
-
-Commands:
-
-start/restart/kill/check/stop/kill
-
-more detail:
-https://github.com/ccqpein/supervisor-rs#usage
-",
-    )
 }
 
 #[cfg(test)]
