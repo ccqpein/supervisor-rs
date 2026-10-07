@@ -5,8 +5,6 @@
 - [Usage](#usage)
   - [Server Side](#server-side)
   - [Client Side](#client-side)
-  - [Use key pairs authenticate clients](#use-key-pairs-authenticate-clients)
-    - [Example:](#example)
   - [Startup-with feature](#startup-with-feature)
   - [Repeat feature](#repeat-feature)
     - [How to stop repeat](#how-to-stop-repeat)
@@ -94,11 +92,32 @@ You can install from cargo.io, run `cargo install supervisor-rs`.
 
 ### Server Side ###
 
-Run `supervisor-rs-server /tmp/server.yml` in shell, you can change server config yaml file to wherever you want. If no config path given, supervisor will going to find `server.yml` in `/tmp`.
+Run `supervisor-rs-server [CONFIG]` or `supervisor-rs-server -c <CONFIG_PATH>` in shell. You can specify a server config YAML file path. If no config path is given, `supervisor-rs` defaults to finding `/tmp/server.yml`.
+
+**CLI options:**
+
+- `[CONFIG]`: Optional positional configuration file path (default: `/tmp/server.yml`)
+- `-c, --config <CONFIG_PATH>`: Specify configuration file path via flag
+- `-h, --help`: Print help information
+- `-V, --version`: Print version information
+
+**Command demo:**
+
+```bash
+# Run server with default config (/tmp/server.yml)
+supervisor-rs-server
+
+# Run server with positional config path
+supervisor-rs-server ./test/server.yml
+
+# Run server with --config flag
+supervisor-rs-server -c ./test/server.yml
+supervisor-rs-server --config ./test/server.yml
+```
 
 After server application start, if `mode` is **full**, then all **application yaml files under loadpath of server config** will be ran by application. So, that means every yaml files in there should be legal application config file, or server cannot start.
 
-Server side's default mode is `quiet`, means server will record `loadphths`, but won't start children automatically.
+Server side's default mode is `quiet`, means server will record `loadpaths`, but won't start children automatically.
 
 Each sub-processing is named with **filename** of yaml file. If have multi-loadpath, make sure **no yaml files have same name**. 
 
@@ -110,85 +129,65 @@ For example, you just want to add a new `loadpaths` to server. You can easily ch
 
 Then you put a child config inside the `loadpath` you just add, then let it start ([Go to Client Side for usage](#client-side)). Server will re-read configuration and start it. Every children run in the same path (current path of children processing) that the config located in.
 
-Technically, server only keep configuration path, and read it again when server need to operate children or find key files.
-
-**Command demo:**
-
-run server with special config file:
-`supervisor-rs-server ./test/server.yml` 
+Technically, server only keep configuration path, and read it again when server need to operate children.
 
 ### Client Side ###
 
-**Operate child processing**:
+`supervisor-rs-client` is used to send commands to the server side daemon.
 
-`supervisor-rs-client restart child0 on localhost` will restart processing `child0` on localhost;
+**Usage:**
 
-`supervisor-rs-client restart child0 on 198.0.0.2` will restart processing `child0` on `192.0.0.2`, I assume you running server side application on this host;
-
-`supervisor-rs-client restart child0 on "198.0.0.2, 198.0.0.3"` will restart processing `child0` on `192.0.0.2` and `192.0.0.3`, I assume you running server side application on these hosts;
-
-After version `0.6` command upper equal with `supervisor-rs-client restart child0 on 198.0.0.2 on 198.0.0.3`
-
-child name is not have to given for `check`/`kill`/`info` commands.
-
-commands:
-
-| command  | behavior                                                                                                                                                                                                                                                                                   |
-| ---      | ---                                                                                                                                                                                                                                                                                        |
-| restart  | restart child on server. this child has to be running (server application). Otherwise, use start instead                                                                                                                                                                                   |
-| start    | start new child. This command can start one-time command, or new config just put in loadpath(s). And, start does not care what's happen in child itself. If it start and panic immediately, supervisor will return success message anyway. Use `check` command to check if it runs or not. |
-| stop     | stop running child. Have to supply child name. If want to stop all children, use `stop all`                                                                                                                                                                                                |
-| check    | return summary of all children who are **running**. If children are not running, no matter what reason, they will be cleaned from kindergarden's table.                                                                                                                                    |
-| trystart | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
-| kill     | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
-| info     | get general information of server self                                                                                                                                                                                                                                                     |
-
-### Use key pairs authenticate clients ###
-
-When server side `encrypt` mode is on, server side will check if data received can decrypt by public keys in `pub_keys_path`
-
-#### Example: ####
-
-**Server side configuration**:
-
-```yaml
-loadpaths:
-  - /tmp/client/
-  - /tmp/second/path
-  
-encrypt: "on"
-pub_keys_path:
-  - /tmp/pub_keys/
-  - /tmp/pub_keys2/
+```bash
+supervisor-rs-client <COMMAND> [OPTIONS]
 ```
 
-When server start with `encrypt: "on"` (only support lowercase), server side will pick key's name out from command received from client and find same `filename` public key (only support `.pem` file) in the `pub_keys_path`. As same as children names, key's name also equal the key file's name. So, make sure there ain't any key files have same names. 
+**Options:**
 
+- `-o, --on <HOST>`: Remote host address(es) to send command to (e.g. `127.0.0.1`, `192.168.1.1`). Can be specified multiple times or comma-separated.
+- `-h, --help`: Print help information (supports both global help and subcommand help, e.g. `supervisor-rs-client start --help`)
+- `-V, --version`: Print version information
 
-**Client side command**
+**Backward-compatible syntax:**
 
-On client side, just run `supervisor-rs-client restart child0 on 198.0.0.2 on 198.0.0.3 with /path/to/key/keyname1.pem`. 
+The legacy preposition syntax `on <HOST>` is still fully supported:
+- `supervisor-rs-client restart child0 on 127.0.0.1` is equivalent to `supervisor-rs-client restart child0 -o 127.0.0.1`
+- `supervisor-rs-client restart child0 on 192.168.1.1 on 192.168.1.2` is equivalent to `supervisor-rs-client restart child0 -o 192.168.1.1 -o 192.168.1.2`
+- `supervisor-rs-client restart child0 on "192.168.1.1, 192.168.1.2"` is equivalent to `supervisor-rs-client restart child0 --on "192.168.1.1, 192.168.1.2"`
 
-Then supervisor will go find key file has named `keyname1`. As flexible as you can change child config after supervisor start, you can also put public key files in `pub_keys_path` while supervisor is running.
+**Commands:**
 
-**CAUTION:** you can only has one `with /bla/bla/key.pem` in each command.
+| command  | arguments       | behavior                                                                                                                                                                                                                                                                                   |
+| ---      | ---             | ---                                                                                                                                                                                                                                                                                        |
+| restart  | `<CHILD>`       | restart child on server. this child has to be running (server application). Otherwise, use start instead                                                                                                                                                                                   |
+| start    | `<CHILD>`       | start new child. This command can start one-time command, or new config just put in loadpath(s). And, start does not care what's happen in child itself. If it start and panic immediately, supervisor will return success message anyway. Use `check` command to check if it runs or not. |
+| stop     | `<CHILD>`       | stop running child. Have to supply child name. If want to stop all children, use `stop all`                                                                                                                                                                                                |
+| check    | `[CHILD]` (opt) | return summary of all children who are **running**. If children are not running, no matter what reason, they will be cleaned from kindergarden's table.                                                                                                                                    |
+| trystart | `<CHILD>`       | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
+| kill     | `[CHILD]` (opt) | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
+| info     | `[CHILD]` (opt) | get general information of server self                                                                                                                                                                                                                                                     |
 
-**Make keypairs**
+**Examples:**
 
-Step 1: Make private key
-`openssl genrsa -out private.pem 4096`
+```bash
+# Restart child0 locally
+supervisor-rs-client restart child0
 
-Remember: key size should less or equal 4096
+# Restart child0 on a remote host (using -o / --on or preposition syntax)
+supervisor-rs-client restart child0 -o 192.168.1.1
+supervisor-rs-client restart child0 on 192.168.1.1
 
-Step 2: Make public key
-`openssl rsa -in private.pem -outform PEM -pubout -out public.pem`
+# Send to multiple hosts
+supervisor-rs-client restart child0 -o 192.168.1.1 -o 192.168.1.2
+supervisor-rs-client restart child0 --on "192.168.1.1, 192.168.1.2"
+supervisor-rs-client restart child0 on 192.168.1.1 on 192.168.1.2
 
-Then, put public key in one of server's `pub_keys_path`. Every commands you send to server side should has `with /path/to/private.pem`.
+# Check status of running children
+supervisor-rs-client check
+supervisor-rs-client check -o 192.168.1.1
 
-
-**FYI**
-
-You **cannot** change encrypt mode when supervisor-rs running. But you can modify `pub_keys_path`.
+# Stop all children
+supervisor-rs-client stop all
+```
 
 ### Startup-with feature ###
 
