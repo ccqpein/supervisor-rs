@@ -1,3 +1,4 @@
+pub mod arg;
 pub mod child;
 pub mod client;
 pub mod keys_handler;

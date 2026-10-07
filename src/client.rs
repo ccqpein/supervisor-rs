@@ -77,13 +77,14 @@ impl Ops {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub enum Prepositions {
     On,
     With,
 }
 
 impl Prepositions {
+    #[allow(dead_code)]
     fn from_str(s: &str) -> Result<Self> {
         match s {
             "On" | "on" => return Ok(Prepositions::On),
@@ -100,6 +101,7 @@ impl Prepositions {
         }
     }
 
+    #[allow(dead_code)]
     fn is_prep(s: &str) -> bool {
         if let Err(_) = Self::from_str(s) {
             return false;
@@ -125,9 +127,9 @@ impl Prepositions {
 }
 
 /// Command struct of client using to talk to server side
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Command {
-    op: Ops,
+    pub op: Ops,
     pub child_name: Option<String>,
     pub prep: Option<Vec<Prepositions>>,
     pub obj: Option<Vec<String>>,
@@ -147,65 +149,28 @@ impl Command {
         Self::new_from_str(s.iter().map(|x| x.as_str()).collect())
     }
 
-    /// major parse function of command
-    pub fn new_from_str(mut s: Vec<&str>) -> Result<Self> {
-        // get op
-        let mut re = Self::new(Ops::from_str(s[0])?);
-
-        // kill and check do not have to have child name
-        if re.op == Ops::Kill || re.op == Ops::Check || re.op == Ops::Info {
-            s.drain(..1); // delete ops
-            if s.len() >= 1 && !Prepositions::is_prep(s[0]) {
-                // has child name
-                if Ops::is_op(s[0]) {
-                    // check child name
-                    return Err(Error::new(
-                        ErrorKind::InvalidInput,
-                        format!("child name cannot be command"),
-                    ));
-                }
-
-                re.child_name = Some(s[0].to_string());
-                s.drain(..1); // delete child name
-            }
-        } else {
-            // other commands
-            s.drain(..1); // delete ops
-            if Ops::is_op(s[0]) {
-                // check child name
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("child name cannot be command"),
-                ));
-            }
-
-            re.child_name = Some(s[0].to_string());
-            s.drain(..1); // delete child name
-        }
-
-        // parse all else
-        if s.len() % 2 != 0 {
+    /// Parse command using Clap with 0.x backwards compatibility
+    pub fn new_from_str(s: Vec<&str>) -> Result<Self> {
+        if s.is_empty() {
             return Err(Error::new(
                 ErrorKind::InvalidInput,
-                "prep & obj arguments number should be even",
+                "no legal operations input",
             ));
         }
 
-        let mut i = 0;
-        let mut prep_cache = vec![];
-        let mut obj_cache = vec![];
-        while i < s.len() {
-            prep_cache.push(Prepositions::from_str(s[i])?);
-            obj_cache.push(s[i + 1].to_string());
-            i += 2;
+        if s[0] == "help" || s[0] == "Help" || s[0] == "-h" || s[0] == "--help" {
+            return Ok(Self::new(Ops::Help));
         }
 
-        if i != 0 {
-            re.prep = Some(prep_cache);
-            re.obj = Some(obj_cache);
-        }
+        let normalized = crate::arg::normalize_client_args(s);
+        let client_args = match crate::arg::ClientArgs::try_parse_from(normalized) {
+            Ok(args) => args,
+            Err(e) => {
+                return Err(Error::new(ErrorKind::InvalidInput, e.to_string()));
+            }
+        };
 
-        Ok(re)
+        client_args.to_command()
     }
 
     pub fn get_ops(&self) -> Ops {
