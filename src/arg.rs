@@ -50,19 +50,15 @@ impl ServerArgs {
     author = "ccQpein",
     version,
     about = "Supervisor-rs client used to send commands to server side.",
-    after_help = "Examples:\n  supervisor-rs-client start child1\n  supervisor-rs-client restart child1 on 192.168.1.1\n  supervisor-rs-client restart child1 --on 192.168.1.1 --with /path/to/key.pem\n  supervisor-rs-client check on ssh://user@192.168.3.3\n\nMore details:\n  https://github.com/ccqpein/supervisor-rs#usage"
+    after_help = "Examples:\n  supervisor-rs-client start child1\n  supervisor-rs-client restart child1 on 192.168.1.1\n  supervisor-rs-client restart child1 --on 192.168.1.1\n  supervisor-rs-client check on 192.168.1.1\n\nMore details:\n  https://github.com/ccqpein/supervisor-rs#usage"
 )]
 pub struct ClientArgs {
     #[command(subcommand)]
     pub command: ClientSubcommand,
 
-    /// Remote host address(es) to send command to (e.g. 192.168.1.1, ssh://user@host)
+    /// Remote host address(es) to send command to (e.g. 192.168.1.1)
     #[arg(short = 'o', long = "on", global = true, action = clap::ArgAction::Append, value_name = "HOST")]
     pub on: Vec<String>,
-
-    /// Path to RSA private key for authentication / encryption
-    #[arg(short = 'w', long = "with", global = true, value_name = "KEY_PATH")]
-    pub with: Option<String>,
 }
 
 impl ClientArgs {
@@ -90,11 +86,6 @@ impl ClientArgs {
 
         let mut prep = vec![];
         let mut obj = vec![];
-
-        if let Some(ref with_key) = self.with {
-            prep.push(Prepositions::With);
-            obj.push(with_key.clone());
-        }
 
         for host in &self.on {
             prep.push(Prepositions::On);
@@ -243,14 +234,11 @@ where
             continue;
         }
 
-        if token == "-o" || token == "--on" || token == "-w" || token == "--with" {
+        if token == "-o" || token == "--on" {
             expecting_value = true;
             normalized.push(token);
         } else if token == "on" || token == "On" {
             normalized.push("--on".to_string());
-            expecting_value = true;
-        } else if token == "with" || token == "With" {
-            normalized.push("--with".to_string());
             expecting_value = true;
         } else {
             normalized.push(token);
@@ -293,8 +281,6 @@ mod tests {
             "child0",
             "--on",
             "127.0.0.1",
-            "--with",
-            "/tmp/key.pem",
         ]);
         let client_args = ClientArgs::try_parse_from(normalized).unwrap();
         assert_eq!(
@@ -304,7 +290,6 @@ mod tests {
             }
         );
         assert_eq!(client_args.on, vec!["127.0.0.1"]);
-        assert_eq!(client_args.with, Some("/tmp/key.pem".to_string()));
     }
 
     #[test]
@@ -315,12 +300,9 @@ mod tests {
             "child0",
             "-o",
             "127.0.0.1",
-            "-w",
-            "/tmp/key.pem",
         ]);
         let client_args = ClientArgs::try_parse_from(normalized).unwrap();
         assert_eq!(client_args.on, vec!["127.0.0.1"]);
-        assert_eq!(client_args.with, Some("/tmp/key.pem".to_string()));
     }
 
     #[test]
@@ -331,8 +313,6 @@ mod tests {
             "child0",
             "on",
             "127.0.0.1",
-            "with",
-            "/tmp/key.pem",
         ]);
         let client_args = ClientArgs::try_parse_from(normalized).unwrap();
         assert_eq!(
@@ -342,18 +322,17 @@ mod tests {
             }
         );
         assert_eq!(client_args.on, vec!["127.0.0.1"]);
-        assert_eq!(client_args.with, Some("/tmp/key.pem".to_string()));
 
         let cmd = client_args.to_command().unwrap();
         assert_eq!(cmd.op, Ops::Restart);
         assert_eq!(cmd.child_name, Some("child0".to_string()));
         assert_eq!(
             cmd.prep,
-            Some(vec![Prepositions::With, Prepositions::On])
+            Some(vec![Prepositions::On])
         );
         assert_eq!(
             cmd.obj,
-            Some(vec!["/tmp/key.pem".to_string(), "127.0.0.1".to_string()])
+            Some(vec!["127.0.0.1".to_string()])
         );
     }
 
@@ -470,13 +449,6 @@ mod tests {
         assert_eq!(cmd.child_name, Some("c1".to_string()));
         assert_eq!(cmd.prep, Some(vec![Prepositions::On]));
         assert_eq!(cmd.obj, Some(vec!["127.0.0.1".to_string()]));
-
-        // check with key on host
-        let cmd = Command::new_from_str(vec!["check", "with", "/tmp/k.pem", "on", "127.0.0.1"]).unwrap();
-        assert_eq!(cmd.op, Ops::Check);
-        assert_eq!(cmd.child_name, None);
-        assert_eq!(cmd.prep, Some(vec![Prepositions::With, Prepositions::On]));
-        assert_eq!(cmd.obj, Some(vec!["/tmp/k.pem".to_string(), "127.0.0.1".to_string()]));
     }
 
     #[test]

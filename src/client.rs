@@ -377,31 +377,25 @@ mod tests {
 
     #[test]
     fn check_parser() {
-        let case0 = vec![
-            "restart", "child", "with", "key", "on", "host", "on", "host1",
-        ];
+        let case0 = vec!["restart", "child", "on", "host", "on", "host1"];
         assert_eq!(
             Command {
                 op: Ops::Restart,
                 child_name: Some("child".to_string()),
-                prep: Some(vec![Prepositions::With, Prepositions::On, Prepositions::On]),
-                obj: Some(vec![
-                    "key".to_string(),
-                    "host".to_string(),
-                    "host1".to_string()
-                ]),
+                prep: Some(vec![Prepositions::On, Prepositions::On]),
+                obj: Some(vec!["host".to_string(), "host1".to_string()]),
             },
             Command::new_from_str(case0).unwrap()
         );
 
         // test2
-        let case1 = vec!["restart", "child", "with", "key", "on", "host1, host2"]; // second hosts format
+        let case1 = vec!["restart", "child", "on", "host1, host2"]; // second hosts format
         assert_eq!(
             Command {
                 op: Ops::Restart,
                 child_name: Some("child".to_string()),
-                prep: Some(vec![Prepositions::With, Prepositions::On]),
-                obj: Some(vec!["key".to_string(), "host1, host2".to_string(),]),
+                prep: Some(vec![Prepositions::On]),
+                obj: Some(vec!["host1, host2".to_string()]),
             },
             Command::new_from_str(case1).unwrap()
         );
@@ -420,15 +414,10 @@ mod tests {
 
     #[test]
     fn check_generate_encrypt_wapper() -> Result<()> {
-        let case0 = vec![
-            "start",
-            "child",
-            "with",
-            "./test/public.pem",
-            "on",
-            "127.0.0.1",
-        ];
-        let com0 = Command::new_from_str(case0)?;
+        let mut com0 = Command::new(Ops::Start);
+        com0.child_name = Some("child".to_string());
+        com0.prep = Some(vec![Prepositions::With, Prepositions::On]);
+        com0.obj = Some(vec!["./test/public.pem".to_string(), "127.0.0.1".to_string()]);
         let dw = com0.generate_encrypt_wapper()?;
         assert_eq!(
             dw,
@@ -436,9 +425,10 @@ mod tests {
         );
         println!("{:?}", dw);
 
-        let case1 = vec!["check", "with", "./test/public.pem", "on", "127.0.0.1"];
-        let com0 = Command::new_from_str(case1)?;
-        let dw = com0.generate_encrypt_wapper()?;
+        let mut com1 = Command::new(Ops::Check);
+        com1.prep = Some(vec![Prepositions::With, Prepositions::On]);
+        com1.obj = Some(vec!["./test/public.pem".to_string(), "127.0.0.1".to_string()]);
+        let dw = com1.generate_encrypt_wapper()?;
         assert_eq!(dw, DataWrapper::new("./test/public.pem", "check").unwrap());
         Ok(())
     }
@@ -459,7 +449,7 @@ mod tests {
             ),
         ];
 
-        let test0 = test.iter().map(|(ref a, ref b)| (a, b)).collect::<Vec<_>>();
+        let test0 = test.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
 
         assert_eq!(
             ip_fields_parser(vec![test0[0]].iter()),
