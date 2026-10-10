@@ -297,19 +297,35 @@ fn ssh_address_parse(address: &str) -> std::result::Result<IpFields<'_>, String>
 
 pub enum ConnectionStream {
     Tcp(TcpStream),
+    Noise(crate::noise::NoiseSession),
     Ssh(Session, String),
 }
 
 impl ConnectionStream {
     /// generate new connections by using IpFields
     pub fn new(ip: IpFields<'_>) -> std::result::Result<ConnectionStream, String> {
+        Self::new_with_noise(ip, None, None)
+    }
+
+    /// generate new connections with optional Noise encryption
+    pub fn new_with_noise(
+        ip: IpFields<'_>,
+        noise_key: Option<&[u8]>,
+        authorized_servers: Option<&[Vec<u8>]>,
+    ) -> std::result::Result<ConnectionStream, String> {
         match ip {
             IpFields::Normal(addr) => {
                 let sock = SocketAddr::new(addr, 33889);
-                Ok(Self::Tcp(
-                    TcpStream::connect_timeout(&sock, Duration::new(5, 0))
-                        .map_err(|_| CANNOT_REACH_SERVER_ERROR)?,
-                ))
+                let tcp = TcpStream::connect_timeout(&sock, Duration::new(5, 0))
+                    .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
+                if let Some(priv_key) = noise_key {
+                    let auth_srv = authorized_servers.unwrap_or(&[]);
+                    let session = crate::noise::client_handshake(tcp, priv_key, auth_srv)
+                        .map_err(|e| format!("Noise handshake error: {}", e))?;
+                    Ok(Self::Noise(session))
+                } else {
+                    Ok(Self::Tcp(tcp))
+                }
             }
             IpFields::SshIp { username, ipaddr } => {
                 let sock = SocketAddr::new(ipaddr, 22);
@@ -327,6 +343,16 @@ impl ConnectionStream {
     /// send command to server during the built streams
     pub fn send_comm(&mut self, comm: &[u8]) -> Result<String> {
         match self {
+            ConnectionStream::Noise(session) => {
+                session
+                    .send(comm)
+                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+                let resp_bytes = session
+                    .recv()
+                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+                String::from_utf8(resp_bytes)
+                    .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))
+            }
             ConnectionStream::Tcp(s) => {
                 s.write_all(comm)?;
 
@@ -354,6 +380,10 @@ impl ConnectionStream {
 
     pub fn address(&self) -> std::result::Result<String, String> {
         Ok(match self {
+            ConnectionStream::Noise(session) => session
+                .peer_addr()
+                .map_err(|e| e.to_string())?
+                .to_string(),
             ConnectionStream::Tcp(s) => s.peer_addr().map_err(|e| e.to_string())?.to_string(),
             ConnectionStream::Ssh(_, addr) => addr.clone(),
         })

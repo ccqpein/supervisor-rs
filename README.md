@@ -5,6 +5,7 @@
 - [Usage](#usage)
   - [Server Side](#server-side)
   - [Client Side](#client-side)
+  - [Noise Protocol Encryption](#noise-protocol-encryption)
   - [Startup-with feature](#startup-with-feature)
   - [Repeat feature](#repeat-feature)
     - [How to stop repeat](#how-to-stop-repeat)
@@ -21,6 +22,7 @@
 + Startup with particular server config
 + Restart processing
 + Stop processing
++ End-to-end encrypted client/server communication via Noise Protocol (Noise_XX)
 
 **Design**:
 
@@ -43,24 +45,26 @@ startup:
   - child1
   - child2
   
-encrypt: on
-pub_keys_path:
-  - vault1
-  - vault2
+# Noise encryption (optional)
+noise: true
+noise_key: /tmp/server.key
+noise_authorized_keys:
+  - /tmp/authorized_keys/
 
 #ipv6: true
 listener_addr: 127.0.0.1
 ```
 
-| Fields        | Usage                                                                                                                                                                  |
-|:-------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| loadpaths     | List of paths of all children config files.                                                                                                                            |
-| mode          | Startup mode. Values can be "quiet", "half", or "full"                                                                                                                 |
-| startup       | When the `mode` is "half", children in this list will start                                                                                                            |
-| encrypt       | Encrypt mode. Values can be "on" or "off"                                                                                                                              |
-| pub_keys_path | When encrypt is "on", this field including the list of paths of public keys                                                                                            |
-| listener_addr | Address of server side is listening                                                                                                                                    |
-| ipv6          | Only used when `listener_addr` isn't given. Values can be `true` or `false`. supervisor-rs server side will listen "::" instead of "0.0.0.0" when this field is `true` |
+| Fields                 | Usage                                                                                                                                                                  |
+|:----------------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
+| loadpaths              | List of paths of all children config files.                                                                                                                            |
+| mode                   | Startup mode. Values can be "quiet", "half", or "full"                                                                                                                 |
+| startup                | When the `mode` is "half", children in this list will start                                                                                                            |
+| noise                  | Enable Noise protocol encryption. Values can be `true` or `false`                                                                                                      |
+| noise_key              | Path to server's 32-byte Curve25519 private key (hex or raw binary)                                                                                                    |
+| noise_authorized_keys  | Path (or list of paths) to authorized client public keys directory or file                                                                                            |
+| listener_addr          | Address of server side is listening                                                                                                                                    |
+| ipv6                   | Only used when `listener_addr` isn't given. Values can be `true` or `false`. supervisor-rs server side will listen "::" instead of "0.0.0.0" when this field is `true` |
 
 
 Example of child's config yaml:
@@ -98,6 +102,10 @@ Run `supervisor-rs-server [CONFIG]` or `supervisor-rs-server -c <CONFIG_PATH>` i
 
 - `[CONFIG]`: Optional positional configuration file path (default: `/tmp/server.yml`)
 - `-c, --config <CONFIG_PATH>`: Specify configuration file path via flag
+- `-n, --noise`: Enable Noise protocol encryption via CLI
+- `--noise-key <KEY_PATH>`: Path to server Noise private key
+- `--noise-authorized-keys <KEYS_PATH>`: Path to authorized client public keys directory or file
+- `--keygen`: Generate a new Noise Curve25519 keypair and exit
 - `-h, --help`: Print help information
 - `-V, --version`: Print version information
 
@@ -113,6 +121,12 @@ supervisor-rs-server ./test/server.yml
 # Run server with --config flag
 supervisor-rs-server -c ./test/server.yml
 supervisor-rs-server --config ./test/server.yml
+
+# Run server with Noise encryption enabled via CLI
+supervisor-rs-server -c ./test/server.yml --noise --noise-key /tmp/server.key --noise-authorized-keys /tmp/authorized_keys/
+
+# Generate a new Noise keypair
+supervisor-rs-server --keygen
 ```
 
 After server application start, if `mode` is **full**, then all **application yaml files under loadpath of server config** will be ran by application. So, that means every yaml files in there should be legal application config file, or server cannot start.
@@ -144,6 +158,9 @@ supervisor-rs-client <COMMAND> [OPTIONS]
 **Options:**
 
 - `-o, --on <HOST>`: Remote host address(es) to send command to (e.g. `127.0.0.1`, `192.168.1.1`). Can be specified multiple times or comma-separated.
+- `-n, --noise`: Enable Noise protocol encryption
+- `-k, --noise-key <KEY_PATH>`: Path to client Noise private key (default: `~/.supervisor/client.key` or `./client.key`)
+- `--noise-authorized-keys <KEYS_PATH>`: Path to authorized server public keys directory or file (default: `./authorized_keys`)
 - `-h, --help`: Print help information (supports both global help and subcommand help, e.g. `supervisor-rs-client start --help`)
 - `-V, --version`: Print version information
 
@@ -165,6 +182,7 @@ The legacy preposition syntax `on <HOST>` is still fully supported:
 | trystart | `<CHILD>`       | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
 | kill     | `[CHILD]` (opt) | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
 | info     | `[CHILD]` (opt) | get general information of server self                                                                                                                                                                                                                                                     |
+| keygen   | `[OUT]` (opt)   | generate a new Noise Curve25519 keypair, optionally saving `<out>.key` and `<out>.pub`                                                                                                                                                                                                     |
 
 **Examples:**
 
@@ -187,6 +205,96 @@ supervisor-rs-client check -o 192.168.1.1
 
 # Stop all children
 supervisor-rs-client stop all
+
+# Generate a new Noise keypair for the client
+supervisor-rs-client keygen
+# Or write to files (creates client.key and client.pub):
+supervisor-rs-client keygen ~/.supervisor/client
+
+# Send encrypted command with Noise protocol
+supervisor-rs-client restart child0 -o 192.168.1.1 --noise -k ~/.supervisor/client.key --noise-authorized-keys ~/.supervisor/authorized_keys/
+```
+
+### Noise Protocol Encryption ###
+
+`supervisor-rs` supports end-to-end encrypted client/server communication using the **Noise Protocol Framework** (`Noise_XX_25519_ChaChaPoly_BLAKE2s`).
+
+**Security Benefits:**
+- **Mutual Authentication**: Both the client and the server authenticate each other's 32-byte Curve25519 static public keys.
+- **Identity Hiding**: Both client and server static public keys are transmitted encrypted across the wire.
+- **Forward Secrecy**: Fresh ephemeral Diffie-Hellman keys are negotiated for every connection, ensuring past sessions cannot be decrypted if keys are later compromised.
+- **Tamper-proof Framing**: Every message is protected with ChaCha20-Poly1305 AEAD authenticated encryption.
+
+#### 1. Generating Keys ####
+
+You can generate 32-byte Curve25519 keypairs directly via the client or server CLI:
+
+```bash
+# Generate keys and print hex to stdout
+supervisor-rs-client keygen
+# or
+supervisor-rs-server --keygen
+
+# Generate keys and save directly to files (<prefix>.key and <prefix>.pub)
+supervisor-rs-client keygen ~/.supervisor/client
+# Creates:
+#   ~/.supervisor/client.key  (Private key, hex format)
+#   ~/.supervisor/client.pub  (Public key, hex format)
+
+supervisor-rs-client keygen /etc/supervisor/server
+# Creates:
+#   /etc/supervisor/server.key
+#   /etc/supervisor/server.pub
+```
+
+#### 2. Server Configuration ####
+
+Enable Noise encryption in `server.yml`:
+
+```yaml
+# server.yml
+loadpaths:
+  - /tmp/client/
+
+noise: true
+noise_key: /etc/supervisor/server.key
+noise_authorized_keys:
+  - /etc/supervisor/authorized_clients/   # Directory of authorized client .pub files
+```
+
+Alternatively, enable and configure via server CLI flags:
+
+```bash
+supervisor-rs-server -c /tmp/server.yml --noise --noise-key /etc/supervisor/server.key --noise-authorized-keys /etc/supervisor/authorized_clients/
+```
+
+The server reads authorized client public keys from:
+- A directory containing `.pub` files (each containing a 64-character hex key).
+- A single file containing hex keys (one per line, `#` comments supported).
+
+If a client attempts to connect with an unrecognized public key, the server rejects the handshake with `PermissionDenied`.
+
+#### 3. Client Configuration & Server Verification ####
+
+**Does the client side also need an `authorized_keys/` folder?**
+
+**Yes!** In mutual authentication (`Noise_XX`), the server sends its static public key to the client during the handshake. To protect against Man-in-the-Middle (MITM) attacks and rogue servers, the client verifies the server's public key against an authorized server keys directory or file.
+
+If the server's public key is not in the client's `authorized_keys`, the client terminates the connection immediately.
+
+**Sending commands with Noise:**
+
+```bash
+# Put server public key into client's authorized_keys folder
+mkdir -p ~/.supervisor/authorized_keys
+cp /path/to/server.pub ~/.supervisor/authorized_keys/
+
+# Send encrypted command
+supervisor-rs-client restart child0 \
+  -o 192.168.1.1 \
+  --noise \
+  -k ~/.supervisor/client.key \
+  --noise-authorized-keys ~/.supervisor/authorized_keys/
 ```
 
 ### Startup-with feature ###

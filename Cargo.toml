@@ -14,6 +14,7 @@ chrono = { version = "0.4", features = ["serde"] }
 openssl = { version = "0.10", features = ["vendored"] }
 ssh2 = "0.9"
 clap = { version = "4", features = ["derive"] }
+snow = "0.9"
 
 [[bin]]
 name = "supervisor-rs-server"

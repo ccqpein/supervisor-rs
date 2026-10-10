@@ -19,6 +19,15 @@ pub struct Kindergarten {
 
     /// encrypt mode
     pub encrypt_mode: bool,
+
+    /// Noise protocol encryption mode
+    pub noise_mode: bool,
+
+    /// Noise server private key (32 bytes)
+    pub noise_key: Option<Vec<u8>>,
+
+    /// Noise authorized client public keys
+    pub noise_authorized_keys: Option<Vec<Vec<u8>>>,
 }
 
 impl Kindergarten {
@@ -29,6 +38,9 @@ impl Kindergarten {
             name_list: HashMap::new(),
 
             encrypt_mode: false,
+            noise_mode: false,
+            noise_key: None,
+            noise_authorized_keys: None,
         }
     }
 

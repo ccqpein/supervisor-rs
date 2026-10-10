@@ -40,6 +40,15 @@ struct ServerConfig {
     /// client public keys location
     keys_path: Option<Vec<String>>,
 
+    /// Noise protocol encryption mode
+    noise_mode: bool,
+
+    /// Noise server private key location
+    noise_key_path: Option<String>,
+
+    /// Noise client public keys location (directory or list of files)
+    noise_authorized_keys_path: Option<Vec<String>>,
+
     /// Listener address
     /// default is 0.0.0.0, ipv4
     listener_addr: String,
@@ -74,6 +83,10 @@ impl ServerConfig {
 
             encrypt_mode: "off".to_string(),
             keys_path: None,
+
+            noise_mode: false,
+            noise_key_path: None,
+            noise_authorized_keys_path: None,
 
             listener_addr: "0.0.0.0".to_string(),
             ipv6: false,
@@ -117,6 +130,45 @@ impl ServerConfig {
                     None => "off".to_string(),
                 };
                 result.encrypt_mode = encrypt;
+
+                // Noise configuration
+                let noise_mode = match doc["noise"].as_bool() {
+                    Some(b) => b,
+                    None => {
+                        if let Some(s) = doc["encrypt"].as_str() {
+                            s == "noise"
+                        } else if let Some(s) = doc["encrypt_mode"].as_str() {
+                            s == "noise"
+                        } else {
+                            false
+                        }
+                    }
+                };
+                result.noise_mode = noise_mode;
+
+                let noise_key = if let Some(s) = doc["noise_key"].as_str() {
+                    Some(s.to_string())
+                } else if let Some(s) = doc["noise_key_path"].as_str() {
+                    Some(s.to_string())
+                } else if let Some(s) = doc["noise_private_key"].as_str() {
+                    Some(s.to_string())
+                } else {
+                    None
+                };
+                result.noise_key_path = noise_key;
+
+                let auth_keys = if let Some(v) = doc["noise_authorized_keys"].as_vec() {
+                    Some(
+                        v.iter()
+                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                            .collect(),
+                    )
+                } else if let Some(s) = doc["noise_authorized_keys"].as_str() {
+                    Some(vec![s.to_string()])
+                } else {
+                    None
+                };
+                result.noise_authorized_keys_path = auth_keys;
 
                 // keys path parse
                 let keys_paths = match doc["pub_keys_path"].as_vec() {
@@ -416,17 +468,40 @@ fn child_name_legal_check(s: &str) -> core::result::Result<(), String> {
 }
 
 /// Receive server config and start a new server
-/// New server including:
-/// 1. a way receive command from client //move to start_deamon
-/// 2. first start will start all children in config path
-/// 3. then keep listening commands and can restart each of them //move to start deamon
 pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
-    // Read server's config file
-    let server_conf = if config_path == "" {
+    let args = crate::arg::ServerArgs {
+        config: if config_path.is_empty() {
+            None
+        } else {
+            Some(config_path.to_string())
+        },
+        config_opt: None,
+        noise: false,
+        noise_key: None,
+        noise_authorized_keys: None,
+        keygen: false,
+    };
+    start_new_server_with_args(&args)
+}
+
+/// Receive server arguments and start a new server with Noise support
+pub fn start_new_server_with_args(args: &crate::arg::ServerArgs) -> Result<Kindergarten> {
+    let config_path = args.config_path();
+    let mut server_conf = if config_path == "" {
         ServerConfig::load("/tmp/server.yml")?
     } else {
         ServerConfig::load(config_path)?
     };
+
+    if args.noise {
+        server_conf.noise_mode = true;
+    }
+    if let Some(ref k) = args.noise_key {
+        server_conf.noise_key_path = Some(k.clone());
+    }
+    if let Some(ref ak) = args.noise_authorized_keys {
+        server_conf.noise_authorized_keys_path = Some(vec![ak.clone()]);
+    }
 
     // create new kindergarten
     let mut kindergarten = Kindergarten::new();
@@ -435,8 +510,46 @@ pub fn start_new_server(config_path: &str) -> Result<Kindergarten> {
     // after this, server_config_path should never changed
     kindergarten.server_config_path = config_path.to_string();
 
-    // kindergarden make encrypt on
-    if server_conf.encrypt_mode == "on" {
+    if server_conf.noise_mode {
+        kindergarten.noise_mode = true;
+        let key_path = server_conf
+            .noise_key_path
+            .as_deref()
+            .unwrap_or("/tmp/server.key");
+        let server_key = crate::noise::load_key_from_file(key_path).map_err(|e| {
+            ioError::new(
+                ErrorKind::NotFound,
+                format!(
+                    "Failed to load Noise server private key from '{}': {}",
+                    key_path, e
+                ),
+            )
+        })?;
+        kindergarten.noise_key = Some(server_key);
+
+        let mut all_auth_keys = Vec::new();
+        if let Some(ref paths) = server_conf.noise_authorized_keys_path {
+            for p in paths {
+                match crate::noise::load_keys_from_path(p) {
+                    Ok(mut keys) => all_auth_keys.append(&mut keys),
+                    Err(e) => {
+                        println!(
+                            "{}",
+                            logger::timelog(&format!(
+                                "Warning: could not load authorized keys from '{}': {}",
+                                p, e
+                            ))
+                        );
+                    }
+                }
+            }
+        }
+        kindergarten.noise_authorized_keys = Some(all_auth_keys);
+        println!(
+            "{}",
+            logger::timelog("Noise protocol encryption enabled (mutual authentication)")
+        );
+    } else if server_conf.encrypt_mode == "on" {
         kindergarten.encrypt_mode = true;
     }
 
@@ -569,78 +682,107 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
 
 /// get client TCP stream and send to channel
 fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
-    let mut buf = [0; 100 + 4096]; // 100 command length + 4096 key length buffer
-    stream.read(&mut buf)?;
+    let noise_mode = kig.lock().unwrap().noise_mode;
 
-    let buf_vec = {
-        let mut temp = buf.to_vec();
-        temp.reverse();
-        while temp[0] == 0 {
-            temp.drain(..1);
-        }
-        temp.reverse();
-        temp
-    };
-
-    // here to check if this command with
-    let received_comm = if kig.lock().unwrap().encrypt_mode {
-        // tell client this server running in encrypt mode
-        stream.write_all("Running on encrypt mode, need to dencrypt your command.\n".as_bytes())?;
-
-        // re-read server config
-        let server_conf = if kig.lock().unwrap().server_config_path == "" {
-            ServerConfig::load("/tmp/server.yml")?
-        } else {
-            ServerConfig::load(&kig.lock().unwrap().server_config_path)?
+    if noise_mode {
+        let (server_key, auth_clients) = {
+            let kg = kig.lock().unwrap();
+            let k = kg.noise_key.clone().ok_or_else(|| {
+                ioError::new(ErrorKind::NotFound, "Noise server private key is not loaded")
+            })?;
+            let ak = kg.noise_authorized_keys.clone().unwrap_or_default();
+            (k, ak)
         };
 
-        // parse keyname and encrypted data
-        let (keyname, data) = match DataWrapper::unwrap_from(&buf_vec) {
-            Ok((n, d)) => (n, d),
-            Err(e) => {
-                stream.write_all(e.to_string().as_bytes())?;
-                return Err(e);
+        let mut session = crate::noise::server_handshake(stream, &server_key, &auth_clients)?;
+        let cmd_bytes = session.recv()?;
+        let received_comm = String::from_utf8(cmd_bytes)
+            .map_err(|e| ioError::new(ErrorKind::InvalidInput, e))?;
+
+        match day_care(kig, received_comm) {
+            Ok(resp) => {
+                session.send(resp.as_bytes())?;
+                Ok(resp)
             }
+            Err(e) => {
+                let _ = session.send(e.to_string().as_bytes());
+                Err(e)
+            }
+        }
+    } else {
+        let mut buf = [0; 100 + 4096]; // 100 command length + 4096 key length buffer
+        let _ = stream.read(&mut buf)?;
+
+        let buf_vec = {
+            let mut temp = buf.to_vec();
+            temp.reverse();
+            while temp[0] == 0 {
+                temp.drain(..1);
+            }
+            temp.reverse();
+            temp
         };
 
-        let key = {
-            let k_path = match server_conf.find_pubkey_by_name(&keyname) {
-                Ok(kk) => kk,
+        // here to check if this command with
+        let received_comm = if kig.lock().unwrap().encrypt_mode {
+            // tell client this server running in encrypt mode
+            stream.write_all("Running on encrypt mode, need to dencrypt your command.\n".as_bytes())?;
+
+            // re-read server config
+            let server_conf = if kig.lock().unwrap().server_config_path == "" {
+                ServerConfig::load("/tmp/server.yml")?
+            } else {
+                ServerConfig::load(&kig.lock().unwrap().server_config_path)?
+            };
+
+            // parse keyname and encrypted data
+            let (keyname, data) = match DataWrapper::unwrap_from(&buf_vec) {
+                Ok((n, d)) => (n, d),
                 Err(e) => {
                     stream.write_all(e.to_string().as_bytes())?;
                     return Err(e);
                 }
             };
 
-            let mut content = String::new();
-            let _ = File::open(k_path)?.read_to_string(&mut content);
-            Rsa::public_key_from_pem(&content.as_bytes())?
-        };
+            let key = {
+                let k_path = match server_conf.find_pubkey_by_name(&keyname) {
+                    Ok(kk) => kk,
+                    Err(e) => {
+                        stream.write_all(e.to_string().as_bytes())?;
+                        return Err(e);
+                    }
+                };
 
-        let dw = match DataWrapper::decrypt_with_pubkey(data, keyname, key) {
-            Ok(d) => d,
-            Err(e) => {
-                stream.write_all(e.to_string().as_bytes())?;
-                return Err(e);
+                let mut content = String::new();
+                let _ = File::open(k_path)?.read_to_string(&mut content);
+                Rsa::public_key_from_pem(&content.as_bytes())?
+            };
+
+            let dw = match DataWrapper::decrypt_with_pubkey(data, keyname, key) {
+                Ok(d) => d,
+                Err(e) => {
+                    stream.write_all(e.to_string().as_bytes())?;
+                    return Err(e);
+                }
+            };
+
+            dw.data
+        } else {
+            match String::from_utf8(buf_vec) {
+                Ok(s) => s,
+                Err(e) => return Err(ioError::new(ErrorKind::InvalidInput, e)),
             }
         };
 
-        dw.data
-    } else {
-        match String::from_utf8(buf_vec) {
-            Ok(s) => s,
-            Err(e) => return Err(ioError::new(ErrorKind::InvalidInput, e)),
-        }
-    };
-
-    match day_care(kig, received_comm) {
-        Ok(resp) => {
-            stream.write_all(resp.as_bytes())?;
-            Ok(resp)
-        }
-        Err(e) => {
-            stream.write_all(e.to_string().as_bytes())?;
-            Err(e)
+        match day_care(kig, received_comm) {
+            Ok(resp) => {
+                stream.write_all(resp.as_bytes())?;
+                Ok(resp)
+            }
+            Err(e) => {
+                stream.write_all(e.to_string().as_bytes())?;
+                Err(e)
+            }
         }
     }
 }

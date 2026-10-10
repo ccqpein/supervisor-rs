@@ -4,12 +4,25 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 use supervisor_rs::arg::ServerArgs;
 use supervisor_rs::logger;
+use supervisor_rs::noise;
 use supervisor_rs::server;
 
 fn main() {
     let args = ServerArgs::parse();
 
-    let k_result = server::start_new_server(args.config_path());
+    if args.keygen {
+        match noise::generate_keypair() {
+            Ok(kp) => {
+                println!("Generated Noise (Curve25519) Keypair:");
+                println!("Private Key (hex): {}", noise::to_hex(&kp.private));
+                println!("Public Key (hex):  {}", noise::to_hex(&kp.public));
+            }
+            Err(e) => eprintln!("Failed to generate keypair: {}", e),
+        }
+        return;
+    }
+
+    let k_result = server::start_new_server_with_args(&args);
 
     let k = match k_result {
         Ok(k) => k,

@@ -20,6 +20,22 @@ pub struct ServerArgs {
     /// Path to server configuration YAML file
     #[arg(short = 'c', long = "config", value_name = "CONFIG_PATH")]
     pub config_opt: Option<String>,
+
+    /// Enable Noise protocol encryption
+    #[arg(short = 'n', long = "noise")]
+    pub noise: bool,
+
+    /// Path to server Noise private key
+    #[arg(long = "noise-key", value_name = "KEY_PATH")]
+    pub noise_key: Option<String>,
+
+    /// Path to authorized client public keys directory or file
+    #[arg(long = "noise-authorized-keys", value_name = "KEYS_PATH")]
+    pub noise_authorized_keys: Option<String>,
+
+    /// Generate a new Noise Curve25519 keypair and exit
+    #[arg(long = "keygen")]
+    pub keygen: bool,
 }
 
 impl ServerArgs {
@@ -50,7 +66,7 @@ impl ServerArgs {
     author = "ccQpein",
     version,
     about = "Supervisor-rs client used to send commands to server side.",
-    after_help = "Examples:\n  supervisor-rs-client start child1\n  supervisor-rs-client restart child1 on 192.168.1.1\n  supervisor-rs-client restart child1 --on 192.168.1.1\n  supervisor-rs-client check on 192.168.1.1\n\nMore details:\n  https://github.com/ccqpein/supervisor-rs#usage"
+    after_help = "Examples:\n  supervisor-rs-client start child1\n  supervisor-rs-client restart child1 on 192.168.1.1\n  supervisor-rs-client restart child1 --on 192.168.1.1\n  supervisor-rs-client check on 192.168.1.1\n  supervisor-rs-client restart child1 -o 192.168.1.1 --noise -k client.key --noise-authorized-keys authorized_keys/\n  supervisor-rs-client keygen\n\nMore details:\n  https://github.com/ccqpein/supervisor-rs#usage"
 )]
 pub struct ClientArgs {
     #[command(subcommand)]
@@ -59,6 +75,18 @@ pub struct ClientArgs {
     /// Remote host address(es) to send command to (e.g. 192.168.1.1)
     #[arg(short = 'o', long = "on", global = true, action = clap::ArgAction::Append, value_name = "HOST")]
     pub on: Vec<String>,
+
+    /// Enable Noise protocol encryption
+    #[arg(short = 'n', long = "noise", global = true)]
+    pub noise: bool,
+
+    /// Path to client Noise private key
+    #[arg(short = 'k', long = "noise-key", global = true, value_name = "KEY_PATH")]
+    pub noise_key: Option<String>,
+
+    /// Path to authorized server public keys directory or file
+    #[arg(long = "noise-authorized-keys", global = true, value_name = "KEYS_PATH")]
+    pub noise_authorized_keys: Option<String>,
 }
 
 impl ClientArgs {
@@ -79,6 +107,12 @@ impl ClientArgs {
 
     /// Convert into legacy Command struct for compatibility with 0.x codebase
     pub fn to_command(&self) -> Result<Command> {
+        if let ClientSubcommand::Keygen { .. } = self.command {
+            return Err(Error::new(
+                ErrorKind::Other,
+                "Keygen is handled locally and cannot be converted to server command",
+            ));
+        }
         self.command.validate()?;
 
         let op = self.command.to_op();
@@ -158,6 +192,13 @@ pub enum ClientSubcommand {
         /// Optional argument
         child: Option<String>,
     },
+
+    /// Generate a new Noise Curve25519 keypair
+    #[command(alias = "Keygen")]
+    Keygen {
+        /// Optional output path prefix (<out>.key and <out>.pub)
+        out: Option<String>,
+    },
 }
 
 impl ClientSubcommand {
@@ -170,6 +211,7 @@ impl ClientSubcommand {
             ClientSubcommand::Check { child } => child.as_deref(),
             ClientSubcommand::Info { child } => child.as_deref(),
             ClientSubcommand::Kill { child } => child.as_deref(),
+            ClientSubcommand::Keygen { .. } => None,
         }
     }
 
@@ -182,6 +224,7 @@ impl ClientSubcommand {
             ClientSubcommand::Check { .. } => Ops::Check,
             ClientSubcommand::Info { .. } => Ops::Info,
             ClientSubcommand::Kill { .. } => Ops::Kill,
+            ClientSubcommand::Keygen { .. } => Ops::Help,
         }
     }
 
@@ -240,6 +283,14 @@ where
         } else if token == "on" || token == "On" {
             normalized.push("--on".to_string());
             expecting_value = true;
+        } else if token == "-k"
+            || token == "--noise-key"
+            || token == "--noise-authorized-keys"
+            || token == "-c"
+            || token == "--config"
+        {
+            expecting_value = true;
+            normalized.push(token);
         } else {
             normalized.push(token);
         }
@@ -465,6 +516,69 @@ mod tests {
         assert_eq!(
             cmd.obj,
             Some(vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()])
+        );
+    }
+
+    #[test]
+    fn test_server_noise_args() {
+        let args = ServerArgs::try_parse_from(&[
+            "supervisor-rs-server",
+            "--noise",
+            "--noise-key",
+            "/tmp/test.key",
+            "--noise-authorized-keys",
+            "/tmp/authorized_keys",
+        ])
+        .unwrap();
+        assert!(args.noise);
+        assert_eq!(args.noise_key, Some("/tmp/test.key".to_string()));
+        assert_eq!(
+            args.noise_authorized_keys,
+            Some("/tmp/authorized_keys".to_string())
+        );
+
+        let args = ServerArgs::try_parse_from(&["supervisor-rs-server", "--keygen"]).unwrap();
+        assert!(args.keygen);
+    }
+
+    #[test]
+    fn test_client_noise_args() {
+        let normalized = normalize_client_args(&[
+            "supervisor-rs-client",
+            "restart",
+            "c1",
+            "--noise",
+            "-k",
+            "/tmp/client.key",
+            "--noise-authorized-keys",
+            "/tmp/authorized_keys",
+            "on",
+            "127.0.0.1",
+        ]);
+        let client_args = ClientArgs::try_parse_from(normalized).unwrap();
+        assert!(client_args.noise);
+        assert_eq!(client_args.noise_key, Some("/tmp/client.key".to_string()));
+        assert_eq!(
+            client_args.noise_authorized_keys,
+            Some("/tmp/authorized_keys".to_string())
+        );
+        assert_eq!(client_args.on, vec!["127.0.0.1".to_string()]);
+    }
+
+    #[test]
+    fn test_client_keygen_subcommand() {
+        let normalized = normalize_client_args(&["supervisor-rs-client", "keygen"]);
+        let client_args = ClientArgs::try_parse_from(normalized).unwrap();
+        assert_eq!(client_args.command, ClientSubcommand::Keygen { out: None });
+        assert!(client_args.to_command().is_err());
+
+        let normalized = normalize_client_args(&["supervisor-rs-client", "keygen", "my_key"]);
+        let client_args = ClientArgs::try_parse_from(normalized).unwrap();
+        assert_eq!(
+            client_args.command,
+            ClientSubcommand::Keygen {
+                out: Some("my_key".to_string())
+            }
         );
     }
 }
