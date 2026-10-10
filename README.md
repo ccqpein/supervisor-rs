@@ -11,6 +11,7 @@
     - [How to stop repeat](#how-to-stop-repeat)
   - [Hooks feature](#hooks-feature)
   - [Custom Listener address & IPV6 support](#custom-listener-address--ipv6-support)
+  - [SSH-agent tunnel feature](#ssh-agent-tunnel-feature)
   - [What if accident happens](#what-if-accident-happens)
 - [Cross compiling](#cross-compiling)
 - [Systemd integration](#systemd-integration)
@@ -157,7 +158,7 @@ supervisor-rs-client <COMMAND> [OPTIONS]
 
 **Options:**
 
-- `-o, --on <HOST>`: Remote host address(es) to send command to (e.g. `127.0.0.1`, `192.168.1.1`). Can be specified multiple times or comma-separated.
+- `-o, --on <HOST>`: Remote host address(es) to send command to (e.g. `127.0.0.1`, `192.168.1.1`, or `ssh://user@host`). Can be specified multiple times or comma-separated.
 - `-n, --noise`: Enable Noise protocol encryption
 - `-k, --noise-key <KEY_PATH>`: Path to client Noise private key (default: `~/.supervisor/client.key` or `./client.key`)
 - `--noise-authorized-keys <KEYS_PATH>`: Path to authorized server public keys directory or file (default: `./authorized_keys`)
@@ -409,6 +410,56 @@ listener_addr: "::1" # only listen local ipv6
 ```
 
 `ipv6` field only used when there is **no** `listener_addr` given, or `supervisor-rs` server side will ignore `ipv6`. If there is no `listener_addr` given, and `ipv6` is true, `supervisor-rs` will start with listen ipv6 address `::`.
+
+### SSH-Agent Tunnel Feature ###
+
+By default, `supervisor-rs-server` listens on `0.0.0.0:33889`. While the [Noise Protocol Encryption](#noise-protocol-encryption) provides end-to-end encryption and mutual authentication for direct TCP connections, you may not want to expose port `33889` to the public internet at all when deploying to cloud environments.
+
+The **SSH-agent tunnel feature** allows the client to connect to the remote host securely over SSH (port 22) using your existing SSH keys, and execute supervisor commands locally on the remote machine.
+
+#### How It Works
+
+Instead of sending raw TCP packets to the server daemon directly, `supervisor-rs-client`:
+1. Connects to port 22 of the remote machine via SSH.
+2. Authenticates using your local SSH-agent.
+3. Spawns `supervisor-rs-client` on the remote server to execute the command locally against `127.0.0.1:33889`.
+4. Returns the command output back to your local client.
+
+#### Setup
+
+**1. Server Side:**
+- No extra server configuration is needed.
+- You can lock down the server daemon to only listen locally by setting `listener_addr: "127.0.0.1"` in `server.yml` so that external machines cannot reach port `33889` directly.
+- Ensure `supervisor-rs-client` is installed and available in the remote user's `PATH`.
+
+**2. Client Side:**
+- Ensure you can SSH into the remote machine with key-based authentication.
+- Add your SSH private key to your local SSH-agent:
+  ```bash
+  ssh-add ~/.ssh/id_rsa
+  ```
+- Optional: Add an entry to your `~/.ssh/config` if needed:
+  ```ssh-config
+  Host myserver
+      HostName 192.168.3.3
+      User ubuntu
+      IdentityFile ~/.ssh/id_rsa
+  ```
+
+#### Usage
+
+Specify the target host with the `ssh://username@ipaddress` format:
+
+```bash
+# Check status of children via SSH tunnel
+supervisor-rs-client check -o ssh://ubuntu@192.168.3.3
+
+# Restart a child process via SSH tunnel
+supervisor-rs-client restart child0 -o ssh://ubuntu@192.168.3.3
+
+# Legacy preposition syntax is also supported
+supervisor-rs-client restart child0 on ssh://ubuntu@192.168.3.3
+```
 
 ### What if accident happens ###
 

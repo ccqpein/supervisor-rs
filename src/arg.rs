@@ -72,7 +72,7 @@ pub struct ClientArgs {
     #[command(subcommand)]
     pub command: ClientSubcommand,
 
-    /// Remote host address(es) to send command to (e.g. 192.168.1.1)
+    /// Remote host address(es) to send command to (e.g. 192.168.1.1, ssh://user@host)
     #[arg(short = 'o', long = "on", global = true, action = clap::ArgAction::Append, value_name = "HOST")]
     pub on: Vec<String>,
 
