@@ -1,8 +1,10 @@
 pub mod arg;
 pub mod child;
 pub mod client;
-pub mod keys_handler;
 pub mod kindergarten;
+pub mod legacy_arg;
 pub mod logger;
+pub mod noise;
 pub mod server;
 pub mod timer;
+pub mod tunnel;

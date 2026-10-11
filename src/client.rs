@@ -1,5 +1,3 @@
-use super::keys_handler::DataWrapper;
-use ssh2::Session;
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind, Result};
 use std::net::{IpAddr, SocketAddr, TcpStream};
@@ -80,7 +78,6 @@ impl Ops {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Prepositions {
     On,
-    With,
 }
 
 impl Prepositions {
@@ -88,7 +85,6 @@ impl Prepositions {
     fn from_str(s: &str) -> Result<Self> {
         match s {
             "On" | "on" => return Ok(Prepositions::On),
-            "With" | "with" => return Ok(Prepositions::With),
             "" => {
                 return Err(Error::new(ErrorKind::InvalidInput, "you miss prepositions"));
             }
@@ -111,14 +107,6 @@ impl Prepositions {
 
     pub fn is_on(&self) -> bool {
         if *self == Self::On {
-            true
-        } else {
-            false
-        }
-    }
-
-    fn is_with(&self) -> bool {
-        if *self == Self::With {
             true
         } else {
             false
@@ -162,7 +150,7 @@ impl Command {
             return Ok(Self::new(Ops::Help));
         }
 
-        let normalized = crate::arg::normalize_client_args(s);
+        let normalized = crate::legacy_arg::normalize_client_args(s);
         let client_args = match crate::arg::ClientArgs::try_parse_from(normalized) {
             Ok(args) => args,
             Err(e) => {
@@ -194,39 +182,6 @@ impl Command {
         )
     }
 
-    pub fn generate_encrypt_wapper(&self) -> Result<DataWrapper> {
-        if self.prep.is_none() {
-            return Err(Error::new(
-                ErrorKind::NotFound,
-                "no key argument flag input",
-            ));
-        }
-
-        if let Some(p) = self.prep.as_ref().unwrap().iter().position(|s| s.is_with()) {
-            let keypath = if let Some(objs) = &self.obj {
-                if let Some(f) = objs.get(p) {
-                    f
-                } else {
-                    return Err(Error::new(
-                        ErrorKind::NotFound,
-                        "no key name argument flag input",
-                    ));
-                }
-            } else {
-                return Err(Error::new(
-                    ErrorKind::NotFound,
-                    "no key name argument flag input",
-                ));
-            };
-
-            DataWrapper::new(&keypath, str::from_utf8(&self.as_bytes()).unwrap())
-        } else {
-            return Err(Error::new(
-                ErrorKind::NotFound,
-                "no key argument flag input",
-            ));
-        }
-    }
 
     /// ops + ' ' + childname
     /// and there are no Prepositions and Objects inside
@@ -297,29 +252,49 @@ fn ssh_address_parse(address: &str) -> std::result::Result<IpFields<'_>, String>
 
 pub enum ConnectionStream {
     Tcp(TcpStream),
-    Ssh(Session, String),
+    Noise(crate::noise::NoiseSession, String),
+    Ssh(crate::tunnel::TunnelStream, String),
 }
 
 impl ConnectionStream {
     /// generate new connections by using IpFields
     pub fn new(ip: IpFields<'_>) -> std::result::Result<ConnectionStream, String> {
+        Self::new_with_noise(ip, None, None)
+    }
+
+    /// generate new connections with optional Noise encryption
+    pub fn new_with_noise(
+        ip: IpFields<'_>,
+        noise_key: Option<&[u8]>,
+        authorized_servers: Option<&[Vec<u8>]>,
+    ) -> std::result::Result<ConnectionStream, String> {
         match ip {
             IpFields::Normal(addr) => {
                 let sock = SocketAddr::new(addr, 33889);
-                Ok(Self::Tcp(
-                    TcpStream::connect_timeout(&sock, Duration::new(5, 0))
-                        .map_err(|_| CANNOT_REACH_SERVER_ERROR)?,
-                ))
+                let tcp = TcpStream::connect_timeout(&sock, Duration::from_secs(5))
+                    .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
+                let _ = tcp.set_read_timeout(Some(Duration::from_secs(5)));
+                let _ = tcp.set_write_timeout(Some(Duration::from_secs(5)));
+                if let Some(priv_key) = noise_key {
+                    let auth_srv = authorized_servers.unwrap_or(&[]);
+                    let session = crate::noise::client_handshake(tcp, priv_key, auth_srv)
+                        .map_err(|e| format!("Noise handshake error: {}", e))?;
+                    Ok(Self::Noise(session, addr.to_string()))
+                } else {
+                    Ok(Self::Tcp(tcp))
+                }
             }
             IpFields::SshIp { username, ipaddr } => {
-                let sock = SocketAddr::new(ipaddr, 22);
-                let tcp = TcpStream::connect_timeout(&sock, Duration::new(5, 0))
-                    .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
-                let mut sess = Session::new().unwrap();
-                sess.set_tcp_stream(tcp);
-                sess.handshake().map_err(|e| e.to_string())?;
-                sess.userauth_agent(username).map_err(|e| e.to_string())?;
-                Ok(Self::Ssh(sess, ipaddr.to_string()))
+                let tunnel = crate::tunnel::TunnelStream::connect(username, ipaddr, 33889)?;
+                let addr_str = format!("ssh://{}@{}", username, ipaddr);
+                if let Some(priv_key) = noise_key {
+                    let auth_srv = authorized_servers.unwrap_or(&[]);
+                    let session = crate::noise::client_handshake(tunnel, priv_key, auth_srv)
+                        .map_err(|e| format!("Noise handshake error over SSH tunnel: {}", e))?;
+                    Ok(Self::Noise(session, addr_str))
+                } else {
+                    Ok(Self::Ssh(tunnel, addr_str))
+                }
             }
         }
     }
@@ -327,6 +302,16 @@ impl ConnectionStream {
     /// send command to server during the built streams
     pub fn send_comm(&mut self, comm: &[u8]) -> Result<String> {
         match self {
+            ConnectionStream::Noise(session, _) => {
+                session
+                    .send(comm)
+                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+                let resp_bytes = session
+                    .recv()
+                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
+                String::from_utf8(resp_bytes)
+                    .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))
+            }
             ConnectionStream::Tcp(s) => {
                 s.write_all(comm)?;
 
@@ -337,16 +322,14 @@ impl ConnectionStream {
 
                 Ok(response)
             }
-            ConnectionStream::Ssh(s, _) => {
-                let mut channel = s.channel_session()?;
-                let mut head = "supervisor-rs-client ".to_string();
-                head.push_str(str::from_utf8(comm).unwrap());
-                channel.exec(head.as_str())?;
+            ConnectionStream::Ssh(tunnel, _) => {
+                tunnel.write_all(comm)?;
+
+                tunnel.flush()?;
 
                 let mut response = String::new();
-                channel.read_to_string(&mut response)?;
+                tunnel.read_to_string(&mut response)?;
 
-                channel.wait_close()?;
                 Ok(response)
             }
         }
@@ -354,6 +337,7 @@ impl ConnectionStream {
 
     pub fn address(&self) -> std::result::Result<String, String> {
         Ok(match self {
+            ConnectionStream::Noise(_, addr) => addr.clone(),
             ConnectionStream::Tcp(s) => s.peer_addr().map_err(|e| e.to_string())?.to_string(),
             ConnectionStream::Ssh(_, addr) => addr.clone(),
         })
@@ -377,31 +361,25 @@ mod tests {
 
     #[test]
     fn check_parser() {
-        let case0 = vec![
-            "restart", "child", "with", "key", "on", "host", "on", "host1",
-        ];
+        let case0 = vec!["restart", "child", "on", "host", "on", "host1"];
         assert_eq!(
             Command {
                 op: Ops::Restart,
                 child_name: Some("child".to_string()),
-                prep: Some(vec![Prepositions::With, Prepositions::On, Prepositions::On]),
-                obj: Some(vec![
-                    "key".to_string(),
-                    "host".to_string(),
-                    "host1".to_string()
-                ]),
+                prep: Some(vec![Prepositions::On, Prepositions::On]),
+                obj: Some(vec!["host".to_string(), "host1".to_string()]),
             },
             Command::new_from_str(case0).unwrap()
         );
 
         // test2
-        let case1 = vec!["restart", "child", "with", "key", "on", "host1, host2"]; // second hosts format
+        let case1 = vec!["restart", "child", "on", "host1, host2"]; // second hosts format
         assert_eq!(
             Command {
                 op: Ops::Restart,
                 child_name: Some("child".to_string()),
-                prep: Some(vec![Prepositions::With, Prepositions::On]),
-                obj: Some(vec!["key".to_string(), "host1, host2".to_string(),]),
+                prep: Some(vec![Prepositions::On]),
+                obj: Some(vec!["host1, host2".to_string()]),
             },
             Command::new_from_str(case1).unwrap()
         );
@@ -418,30 +396,6 @@ mod tests {
         assert_eq!(case0.prep_obj_pairs(), None);
     }
 
-    #[test]
-    fn check_generate_encrypt_wapper() -> Result<()> {
-        let case0 = vec![
-            "start",
-            "child",
-            "with",
-            "./test/public.pem",
-            "on",
-            "127.0.0.1",
-        ];
-        let com0 = Command::new_from_str(case0)?;
-        let dw = com0.generate_encrypt_wapper()?;
-        assert_eq!(
-            dw,
-            DataWrapper::new("./test/public.pem", "start child").unwrap()
-        );
-        println!("{:?}", dw);
-
-        let case1 = vec!["check", "with", "./test/public.pem", "on", "127.0.0.1"];
-        let com0 = Command::new_from_str(case1)?;
-        let dw = com0.generate_encrypt_wapper()?;
-        assert_eq!(dw, DataWrapper::new("./test/public.pem", "check").unwrap());
-        Ok(())
-    }
 
     #[test]
     fn test_ip_fields_parser() {
@@ -459,7 +413,7 @@ mod tests {
             ),
         ];
 
-        let test0 = test.iter().map(|(ref a, ref b)| (a, b)).collect::<Vec<_>>();
+        let test0 = test.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
 
         assert_eq!(
             ip_fields_parser(vec![test0[0]].iter()),
@@ -495,5 +449,29 @@ mod tests {
             ]),
         );
         assert!(ip_fields_parser(vec![test0[4]].iter()).is_err());
+    }
+
+    #[test]
+    fn test_connection_stream_normal_tcp_send_comm() {
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let handle = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 1024];
+            let n = socket.read(&mut buf).unwrap();
+            assert_eq!(&buf[..n], b"check");
+            socket.write_all(b"All children good").unwrap();
+        });
+
+        let tcp = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let mut conn = ConnectionStream::Tcp(tcp);
+        let resp = conn.send_comm(b"check").unwrap();
+        assert_eq!(resp, "All children good");
+
+        handle.join().unwrap();
     }
 }

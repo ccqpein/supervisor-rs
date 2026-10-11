@@ -1,8 +1,12 @@
 use std::env;
+use std::fs;
 use std::net::IpAddr;
+use std::path::Path;
 use std::str::FromStr;
-use supervisor_rs::arg::{normalize_client_args, ClientArgs};
+use supervisor_rs::arg::{ClientArgs, ClientSubcommand};
 use supervisor_rs::client::*;
+use supervisor_rs::legacy_arg::normalize_client_args;
+use supervisor_rs::noise;
 
 fn main() {
     let normalized = normalize_client_args(env::args());
@@ -13,12 +17,114 @@ fn main() {
         }
     };
 
+    if let ClientSubcommand::Keygen {
+        ref out,
+        ref pubkey_from,
+    } = client_args.command
+    {
+        if let Some(priv_path) = pubkey_from {
+            match noise::load_key_from_file(priv_path) {
+                Ok(priv_bytes) => match noise::derive_public_key(&priv_bytes) {
+                    Ok(pub_bytes) => {
+                        let pub_hex = noise::to_hex(&pub_bytes);
+                        if let Some(path_prefix) = out {
+                            let pub_path = format!("{}.pub", path_prefix);
+                            if let Err(e) = fs::write(&pub_path, &pub_hex) {
+                                eprintln!("Failed to write public key to {}: {}", pub_path, e);
+                                return;
+                            }
+                            println!("Derived Noise (Curve25519) Public Key from {}:", priv_path);
+                            println!("Wrote public key to: {}", pub_path);
+                        } else {
+                            println!("Derived Noise (Curve25519) Public Key from {}:", priv_path);
+                            println!("Public Key (hex): {}", pub_hex);
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to derive public key: {}", e),
+                },
+                Err(e) => eprintln!("Failed to load private key from {}: {}", priv_path, e),
+            }
+            return;
+        }
+
+        match noise::generate_keypair() {
+            Ok(kp) => {
+                let priv_hex = noise::to_hex(&kp.private);
+                let pub_hex = noise::to_hex(&kp.public);
+                if let Some(path_prefix) = out {
+                    let key_path = format!("{}.key", path_prefix);
+                    let pub_path = format!("{}.pub", path_prefix);
+                    if let Err(e) = fs::write(&key_path, &priv_hex) {
+                        eprintln!("Failed to write private key to {}: {}", key_path, e);
+                        return;
+                    }
+                    if let Err(e) = fs::write(&pub_path, &pub_hex) {
+                        eprintln!("Failed to write public key to {}: {}", pub_path, e);
+                        return;
+                    }
+                    println!("Generated Noise (Curve25519) Keypair:");
+                    println!("Wrote private key to: {}", key_path);
+                    println!("Wrote public key to:  {}", pub_path);
+                } else {
+                    println!("Generated Noise (Curve25519) Keypair:");
+                    println!("Private Key (hex): {}", priv_hex);
+                    println!("Public Key (hex):  {}", pub_hex);
+                }
+            }
+            Err(e) => eprintln!("Failed to generate keypair: {}", e),
+        }
+        return;
+    }
+
     let cache_command = match client_args.to_command() {
         Ok(c) => c,
         Err(e) => {
             println!("error: {}", e);
             return;
         }
+    };
+
+    // Load Noise keys if Noise protocol is enabled
+    let (noise_key, authorized_servers) = if client_args.noise || client_args.noise_key.is_some() {
+        let key_path = client_args.noise_key.as_deref().unwrap_or_else(|| {
+            if Path::new("./client.key").exists() {
+                "./client.key"
+            } else {
+                "/tmp/client.key"
+            }
+        });
+
+        let key = match noise::load_key_from_file(key_path) {
+            Ok(k) => k,
+            Err(e) => {
+                eprintln!(
+                    "Noise encryption enabled, but failed to load client private key from '{}': {}",
+                    key_path, e
+                );
+                return;
+            }
+        };
+
+        let mut auth_servers = Vec::new();
+        if let Some(ref auth_path) = client_args.noise_authorized_keys {
+            match noise::load_keys_from_path(auth_path) {
+                Ok(keys) => auth_servers = keys,
+                Err(e) => {
+                    eprintln!(
+                        "Warning: failed to load authorized server keys from '{}': {}",
+                        auth_path, e
+                    );
+                }
+            }
+        } else if Path::new("./authorized_keys").exists() {
+            if let Ok(keys) = noise::load_keys_from_path("./authorized_keys") {
+                auth_servers = keys;
+            }
+        }
+
+        (Some(key), Some(auth_servers))
+    } else {
+        (None, None)
     };
 
     // build streams, parse all host
@@ -35,7 +141,11 @@ fn main() {
                     let mut a = vec![];
                     //creat socket
                     for addr in addrs {
-                        match ConnectionStream::new(addr) {
+                        match ConnectionStream::new_with_noise(
+                            addr,
+                            noise_key.as_deref(),
+                            authorized_servers.as_deref(),
+                        ) {
                             Ok(s) => a.push(s),
                             Err(e) => {
                                 println!("{}", e.to_string());
@@ -57,9 +167,11 @@ fn main() {
 
     if streams.len() == 0 {
         // If don't have prep, give local address (ipv4)
-        streams = vec![match ConnectionStream::new(IpFields::Normal(
-            IpAddr::from_str("127.0.0.1").unwrap(),
-        )) {
+        streams = vec![match ConnectionStream::new_with_noise(
+            IpFields::Normal(IpAddr::from_str("127.0.0.1").unwrap()),
+            noise_key.as_deref(),
+            authorized_servers.as_deref(),
+        ) {
             Ok(s) => s,
             Err(e) => {
                 println!("{}", e.to_string());
@@ -68,19 +180,21 @@ fn main() {
         }];
     }
 
-    // Here to check/make encrypt data
-    let data_2_server = if let Ok(d) = cache_command.generate_encrypt_wapper() {
-        d.encrypt_to_bytes().unwrap()
-    } else {
-        cache_command.as_bytes()
-    };
+    let data_2_server = cache_command.as_bytes();
 
     //send same commands to all servers
     for mut stream in streams {
+        let resp = match stream.send_comm(&data_2_server) {
+            Ok(r) => r,
+            Err(e) => {
+                eprintln!("Error sending command: {}", e);
+                continue;
+            }
+        };
         print!(
             "Server {} response:\n{}",
-            stream.address().unwrap(),
-            stream.send_comm(&data_2_server).unwrap()
+            stream.address().unwrap_or_default(),
+            resp
         );
     }
 }

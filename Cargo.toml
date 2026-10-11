@@ -1,6 +1,6 @@
 [package]
 name = "supervisor-rs"
-version = "0.8.6"
+version = "0.9.0"
 authors = ["ccQpein"]
 edition = "2024"
 description = "Manage (Start/Stop/Restart/etc.) processings on server."
@@ -11,9 +11,10 @@ readme = "README.md"
 [dependencies]
 yaml-rust = "0.4"
 chrono = { version = "0.4", features = ["serde"] }
-openssl = { version = "0.10", features = ["vendored"] }
+openssl-sys = { version = "0.9", features = ["vendored"] }
 ssh2 = "0.9"
 clap = { version = "4", features = ["derive"] }
+snow = "0.9"
 
 [[bin]]
 name = "supervisor-rs-server"
