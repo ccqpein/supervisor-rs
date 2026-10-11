@@ -464,18 +464,20 @@ The **SSH-agent tunnel feature** allows the client to connect to the remote host
 
 #### How It Works
 
-Instead of sending raw TCP packets to the server daemon directly, `supervisor-rs-client`:
+Instead of exposing port `33889` to the internet or executing remote shell commands, `supervisor-rs-client`:
 1. Connects to port 22 of the remote machine via SSH.
 2. Authenticates using your local SSH-agent.
-3. Spawns `supervisor-rs-client` on the remote server to execute the command locally against `127.0.0.1:33889`.
-4. Returns the command output back to your local client.
+3. Opens a direct-tcpip channel directly to `127.0.0.1:33889` on the remote server.
+4. Communicates directly with the supervisor daemon through the encrypted tunnel:
+   - If `--noise` is enabled, the client performs the Noise handshake and end-to-end encryption through the SSH tunnel using your local Noise keys!
+   - If `--noise` is omitted, commands are sent directly through the encrypted SSH tunnel.
 
 #### Setup
 
 **1. Server Side:**
 - No extra server configuration is needed.
+- You do **not** need `supervisor-rs-client` installed on the remote machine; only `supervisor-rs-server` needs to be running.
 - You can lock down the server daemon to only listen locally by setting `listener_addr: "127.0.0.1"` in `server.yml` so that external machines cannot reach port `33889` directly.
-- Ensure `supervisor-rs-client` is installed and available in the remote user's `PATH`.
 
 **2. Client Side:**
 - Ensure you can SSH into the remote machine with key-based authentication.
@@ -496,11 +498,14 @@ Instead of sending raw TCP packets to the server daemon directly, `supervisor-rs
 Specify the target host with the `ssh://username@ipaddress` format:
 
 ```bash
-# Check status of children via SSH tunnel
+# Check status of children via SSH tunnel with Noise encryption
+supervisor-rs-client check -o ssh://ubuntu@192.168.3.3 --noise -k ~/.supervisor/client.key
+
+# Check status of children via plain SSH tunnel (server without Noise)
 supervisor-rs-client check -o ssh://ubuntu@192.168.3.3
 
 # Restart a child process via SSH tunnel
-supervisor-rs-client restart child0 -o ssh://ubuntu@192.168.3.3
+supervisor-rs-client restart child0 -o ssh://ubuntu@192.168.3.3 --noise -k ~/.supervisor/client.key
 
 # [Legacy] preposition syntax:
 supervisor-rs-client restart child0 on ssh://ubuntu@192.168.3.3

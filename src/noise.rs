@@ -1,6 +1,5 @@
 use std::fs::{self, File};
-use std::io::{self, Read, Write};
-use std::net::TcpStream;
+use std::io::{self, Read};
 use std::path::Path;
 
 pub const NOISE_PATTERN: &str = "Noise_XX_25519_ChaChaPoly_BLAKE2s";
@@ -131,8 +130,12 @@ pub fn load_keys_from_path(path: impl AsRef<Path>) -> io::Result<Vec<Vec<u8>>> {
     Ok(keys)
 }
 
-/// Send a 2-byte length-prefixed frame over TCP
-pub fn send_frame(stream: &mut TcpStream, data: &[u8]) -> io::Result<()> {
+/// Trait representing any bidirectional byte stream suitable for Noise transport
+pub trait Stream: io::Read + io::Write + Send {}
+impl<T: io::Read + io::Write + Send> Stream for T {}
+
+/// Send a 2-byte length-prefixed frame
+pub fn send_frame<W: io::Write + ?Sized>(stream: &mut W, data: &[u8]) -> io::Result<()> {
     if data.len() > MAX_MESSAGE_LEN {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
@@ -146,8 +149,8 @@ pub fn send_frame(stream: &mut TcpStream, data: &[u8]) -> io::Result<()> {
     Ok(())
 }
 
-/// Read a 2-byte length-prefixed frame from TCP
-pub fn recv_frame(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
+/// Read a 2-byte length-prefixed frame
+pub fn recv_frame<R: io::Read + ?Sized>(stream: &mut R) -> io::Result<Vec<u8>> {
     let mut len_buf = [0u8; 2];
     stream.read_exact(&mut len_buf)?;
     let len = u16::from_be_bytes(len_buf) as usize;
@@ -159,7 +162,7 @@ pub fn recv_frame(stream: &mut TcpStream) -> io::Result<Vec<u8>> {
 
 /// Encrypted Noise transport session
 pub struct NoiseSession {
-    pub stream: TcpStream,
+    pub stream: Box<dyn Stream>,
     pub transport: snow::TransportState,
 }
 
@@ -190,16 +193,11 @@ impl NoiseSession {
     pub fn remote_static_key(&self) -> Option<&[u8]> {
         self.transport.get_remote_static()
     }
-
-    /// Get peer address
-    pub fn peer_addr(&self) -> io::Result<std::net::SocketAddr> {
-        self.stream.peer_addr()
-    }
 }
 
 /// Perform server-side Noise_XX handshake and authenticate client against authorized keys
-pub fn server_handshake(
-    mut stream: TcpStream,
+pub fn server_handshake<S: Stream + 'static>(
+    mut stream: S,
     server_priv_key: &[u8],
     authorized_clients: &[Vec<u8>],
 ) -> io::Result<NoiseSession> {
@@ -252,12 +250,15 @@ pub fn server_handshake(
         .into_transport_mode()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
-    Ok(NoiseSession { stream, transport })
+    Ok(NoiseSession {
+        stream: Box::new(stream),
+        transport,
+    })
 }
 
 /// Perform client-side Noise_XX handshake and authenticate server against authorized keys
-pub fn client_handshake(
-    mut stream: TcpStream,
+pub fn client_handshake<S: Stream + 'static>(
+    mut stream: S,
     client_priv_key: &[u8],
     authorized_servers: &[Vec<u8>],
 ) -> io::Result<NoiseSession> {
@@ -305,13 +306,16 @@ pub fn client_handshake(
         .into_transport_mode()
         .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
 
-    Ok(NoiseSession { stream, transport })
+    Ok(NoiseSession {
+        stream: Box::new(stream),
+        transport,
+    })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::net::TcpListener;
+    use std::net::{TcpListener, TcpStream};
     use std::thread;
 
     #[test]

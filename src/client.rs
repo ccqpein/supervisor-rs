@@ -1,4 +1,3 @@
-use ssh2::Session;
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind, Result};
 use std::net::{IpAddr, SocketAddr, TcpStream};
@@ -253,8 +252,8 @@ fn ssh_address_parse(address: &str) -> std::result::Result<IpFields<'_>, String>
 
 pub enum ConnectionStream {
     Tcp(TcpStream),
-    Noise(crate::noise::NoiseSession),
-    Ssh(Session, String),
+    Noise(crate::noise::NoiseSession, String),
+    Ssh(crate::tunnel::TunnelStream, String),
 }
 
 impl ConnectionStream {
@@ -278,20 +277,22 @@ impl ConnectionStream {
                     let auth_srv = authorized_servers.unwrap_or(&[]);
                     let session = crate::noise::client_handshake(tcp, priv_key, auth_srv)
                         .map_err(|e| format!("Noise handshake error: {}", e))?;
-                    Ok(Self::Noise(session))
+                    Ok(Self::Noise(session, addr.to_string()))
                 } else {
                     Ok(Self::Tcp(tcp))
                 }
             }
             IpFields::SshIp { username, ipaddr } => {
-                let sock = SocketAddr::new(ipaddr, 22);
-                let tcp = TcpStream::connect_timeout(&sock, Duration::new(5, 0))
-                    .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
-                let mut sess = Session::new().unwrap();
-                sess.set_tcp_stream(tcp);
-                sess.handshake().map_err(|e| e.to_string())?;
-                sess.userauth_agent(username).map_err(|e| e.to_string())?;
-                Ok(Self::Ssh(sess, ipaddr.to_string()))
+                let tunnel = crate::tunnel::TunnelStream::connect(username, ipaddr, 33889)?;
+                let addr_str = format!("ssh://{}@{}", username, ipaddr);
+                if let Some(priv_key) = noise_key {
+                    let auth_srv = authorized_servers.unwrap_or(&[]);
+                    let session = crate::noise::client_handshake(tunnel, priv_key, auth_srv)
+                        .map_err(|e| format!("Noise handshake error over SSH tunnel: {}", e))?;
+                    Ok(Self::Noise(session, addr_str))
+                } else {
+                    Ok(Self::Ssh(tunnel, addr_str))
+                }
             }
         }
     }
@@ -299,7 +300,7 @@ impl ConnectionStream {
     /// send command to server during the built streams
     pub fn send_comm(&mut self, comm: &[u8]) -> Result<String> {
         match self {
-            ConnectionStream::Noise(session) => {
+            ConnectionStream::Noise(session, _) => {
                 session
                     .send(comm)
                     .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
@@ -319,16 +320,14 @@ impl ConnectionStream {
 
                 Ok(response)
             }
-            ConnectionStream::Ssh(s, _) => {
-                let mut channel = s.channel_session()?;
-                let mut head = "supervisor-rs-client ".to_string();
-                head.push_str(str::from_utf8(comm).unwrap());
-                channel.exec(head.as_str())?;
+            ConnectionStream::Ssh(tunnel, _) => {
+                tunnel.write_all(comm)?;
+
+                tunnel.flush()?;
 
                 let mut response = String::new();
-                channel.read_to_string(&mut response)?;
+                tunnel.read_to_string(&mut response)?;
 
-                channel.wait_close()?;
                 Ok(response)
             }
         }
@@ -336,10 +335,7 @@ impl ConnectionStream {
 
     pub fn address(&self) -> std::result::Result<String, String> {
         Ok(match self {
-            ConnectionStream::Noise(session) => session
-                .peer_addr()
-                .map_err(|e| e.to_string())?
-                .to_string(),
+            ConnectionStream::Noise(_, addr) => addr.clone(),
             ConnectionStream::Tcp(s) => s.peer_addr().map_err(|e| e.to_string())?.to_string(),
             ConnectionStream::Ssh(_, addr) => addr.clone(),
         })
@@ -451,5 +447,29 @@ mod tests {
             ]),
         );
         assert!(ip_fields_parser(vec![test0[4]].iter()).is_err());
+    }
+
+    #[test]
+    fn test_connection_stream_normal_tcp_send_comm() {
+        use std::net::TcpListener;
+        use std::thread;
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let handle = thread::spawn(move || {
+            let (mut socket, _) = listener.accept().unwrap();
+            let mut buf = [0u8; 1024];
+            let n = socket.read(&mut buf).unwrap();
+            assert_eq!(&buf[..n], b"check");
+            socket.write_all(b"All children good").unwrap();
+        });
+
+        let tcp = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        let mut conn = ConnectionStream::Tcp(tcp);
+        let resp = conn.send_comm(b"check").unwrap();
+        assert_eq!(resp, "All children good");
+
+        handle.join().unwrap();
     }
 }
