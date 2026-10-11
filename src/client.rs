@@ -1,4 +1,3 @@
-use super::keys_handler::DataWrapper;
 use ssh2::Session;
 use std::io::prelude::*;
 use std::io::{Error, ErrorKind, Result};
@@ -80,7 +79,6 @@ impl Ops {
 #[derive(Debug, PartialEq, Clone)]
 pub enum Prepositions {
     On,
-    With,
 }
 
 impl Prepositions {
@@ -88,7 +86,6 @@ impl Prepositions {
     fn from_str(s: &str) -> Result<Self> {
         match s {
             "On" | "on" => return Ok(Prepositions::On),
-            "With" | "with" => return Ok(Prepositions::With),
             "" => {
                 return Err(Error::new(ErrorKind::InvalidInput, "you miss prepositions"));
             }
@@ -111,14 +108,6 @@ impl Prepositions {
 
     pub fn is_on(&self) -> bool {
         if *self == Self::On {
-            true
-        } else {
-            false
-        }
-    }
-
-    fn is_with(&self) -> bool {
-        if *self == Self::With {
             true
         } else {
             false
@@ -194,39 +183,6 @@ impl Command {
         )
     }
 
-    pub fn generate_encrypt_wapper(&self) -> Result<DataWrapper> {
-        if self.prep.is_none() {
-            return Err(Error::new(
-                ErrorKind::NotFound,
-                "no key argument flag input",
-            ));
-        }
-
-        if let Some(p) = self.prep.as_ref().unwrap().iter().position(|s| s.is_with()) {
-            let keypath = if let Some(objs) = &self.obj {
-                if let Some(f) = objs.get(p) {
-                    f
-                } else {
-                    return Err(Error::new(
-                        ErrorKind::NotFound,
-                        "no key name argument flag input",
-                    ));
-                }
-            } else {
-                return Err(Error::new(
-                    ErrorKind::NotFound,
-                    "no key name argument flag input",
-                ));
-            };
-
-            DataWrapper::new(&keypath, str::from_utf8(&self.as_bytes()).unwrap())
-        } else {
-            return Err(Error::new(
-                ErrorKind::NotFound,
-                "no key argument flag input",
-            ));
-        }
-    }
 
     /// ops + ' ' + childname
     /// and there are no Prepositions and Objects inside
@@ -442,26 +398,6 @@ mod tests {
         assert_eq!(case0.prep_obj_pairs(), None);
     }
 
-    #[test]
-    fn check_generate_encrypt_wapper() -> Result<()> {
-        let mut com0 = Command::new(Ops::Start);
-        com0.child_name = Some("child".to_string());
-        com0.prep = Some(vec![Prepositions::With, Prepositions::On]);
-        com0.obj = Some(vec!["./test/public.pem".to_string(), "127.0.0.1".to_string()]);
-        let dw = com0.generate_encrypt_wapper()?;
-        assert_eq!(
-            dw,
-            DataWrapper::new("./test/public.pem", "start child").unwrap()
-        );
-        println!("{:?}", dw);
-
-        let mut com1 = Command::new(Ops::Check);
-        com1.prep = Some(vec![Prepositions::With, Prepositions::On]);
-        com1.obj = Some(vec!["./test/public.pem".to_string(), "127.0.0.1".to_string()]);
-        let dw = com1.generate_encrypt_wapper()?;
-        assert_eq!(dw, DataWrapper::new("./test/public.pem", "check").unwrap());
-        Ok(())
-    }
 
     #[test]
     fn test_ip_fields_parser() {

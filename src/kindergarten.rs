@@ -17,9 +17,6 @@ pub struct Kindergarten {
     /// cannot accept duplicated name
     name_list: HashMap<String, u32>,
 
-    /// encrypt mode
-    pub encrypt_mode: bool,
-
     /// Noise protocol encryption mode
     pub noise_mode: bool,
 
@@ -37,7 +34,6 @@ impl Kindergarten {
             id_list: HashMap::new(),
             name_list: HashMap::new(),
 
-            encrypt_mode: false,
             noise_mode: false,
             noise_key: None,
             noise_authorized_keys: None,

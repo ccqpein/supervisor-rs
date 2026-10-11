@@ -1,12 +1,10 @@
 use super::child::{child_output::OutputMode, Config};
 use super::client;
-use super::keys_handler::*;
 use super::kindergarten::*;
 use super::logger;
 use super::timer::*;
 
 use chrono::prelude::*;
-use openssl::rsa::*;
 use std::collections::HashSet;
 use std::fs;
 use std::fs::{File, OpenOptions};
@@ -33,12 +31,6 @@ struct ServerConfig {
 
     /// The list of children want to start up with server
     startup_list: Option<Vec<String>>,
-
-    /// encrypt mode
-    encrypt_mode: String,
-
-    /// client public keys location
-    keys_path: Option<Vec<String>>,
 
     /// Noise protocol encryption mode
     noise_mode: bool,
@@ -81,9 +73,6 @@ impl ServerConfig {
             mode: "quiet".to_string(),
             startup_list: None,
 
-            encrypt_mode: "off".to_string(),
-            keys_path: None,
-
             noise_mode: false,
             noise_key_path: None,
             noise_authorized_keys_path: None,
@@ -124,13 +113,6 @@ impl ServerConfig {
                 };
                 result.startup_list = startup_children;
 
-                // encrypt parse
-                let encrypt = match doc["encrypt"].as_str() {
-                    Some(v) => v.to_string(),
-                    None => "off".to_string(),
-                };
-                result.encrypt_mode = encrypt;
-
                 // Noise configuration
                 let noise_mode = match doc["noise"].as_bool() {
                     Some(b) => b,
@@ -169,17 +151,6 @@ impl ServerConfig {
                     None
                 };
                 result.noise_authorized_keys_path = auth_keys;
-
-                // keys path parse
-                let keys_paths = match doc["pub_keys_path"].as_vec() {
-                    Some(v) => Some(
-                        v.iter()
-                            .map(|x| x.clone().into_string().unwrap())
-                            .collect::<Vec<String>>(),
-                    ),
-                    None => None,
-                };
-                result.keys_path = keys_paths;
 
                 // ipv6
                 let p6 = match doc["ipv6"].as_bool() {
@@ -281,41 +252,6 @@ impl ServerConfig {
         ))
     }
 
-    /// Return key's path
-    fn find_pubkey_by_name(&self, filename: &String) -> Result<String> {
-        if let Some(paths) = &self.keys_path {
-            for path in paths {
-                for entry in fs::read_dir(path)? {
-                    if let Ok(entry) = entry {
-                        if let Some(extension) = entry.path().extension() {
-                            if extension == "pem" {
-                                if entry
-                                    .file_name()
-                                    .to_str()
-                                    .unwrap()
-                                    .split('.')
-                                    .collect::<Vec<&str>>()[0]
-                                    .to_string()
-                                    == *filename
-                                {
-                                    return Ok(entry
-                                        .path()
-                                        .into_os_string()
-                                        .into_string()
-                                        .unwrap());
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        Err(ioError::new(
-            ErrorKind::NotFound,
-            format!("Cannot found '{}' file in keys path", filename),
-        ))
-    }
 
     /// recursive check if config have dead loop prehook call
     fn recursive_check(
@@ -549,8 +485,6 @@ pub fn start_new_server_with_args(args: &crate::arg::ServerArgs) -> Result<Kinde
             "{}",
             logger::timelog("Noise protocol encryption enabled (mutual authentication)")
         );
-    } else if server_conf.encrypt_mode == "on" {
-        kindergarten.encrypt_mode = true;
     }
 
     // make startup children vec
@@ -710,69 +644,15 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
             }
         }
     } else {
-        let mut buf = [0; 100 + 4096]; // 100 command length + 4096 key length buffer
-        let _ = stream.read(&mut buf)?;
+        let mut buf = [0; 100 + 4096];
+        let n = stream.read(&mut buf)?;
 
-        let buf_vec = {
-            let mut temp = buf.to_vec();
-            temp.reverse();
-            while temp[0] == 0 {
-                temp.drain(..1);
-            }
-            temp.reverse();
-            temp
+        let payload = match buf[..n].iter().position(|&b| b == 0) {
+            Some(pos) => &buf[..pos],
+            None => &buf[..n],
         };
-
-        // here to check if this command with
-        let received_comm = if kig.lock().unwrap().encrypt_mode {
-            // tell client this server running in encrypt mode
-            stream.write_all("Running on encrypt mode, need to dencrypt your command.\n".as_bytes())?;
-
-            // re-read server config
-            let server_conf = if kig.lock().unwrap().server_config_path == "" {
-                ServerConfig::load("/tmp/server.yml")?
-            } else {
-                ServerConfig::load(&kig.lock().unwrap().server_config_path)?
-            };
-
-            // parse keyname and encrypted data
-            let (keyname, data) = match DataWrapper::unwrap_from(&buf_vec) {
-                Ok((n, d)) => (n, d),
-                Err(e) => {
-                    stream.write_all(e.to_string().as_bytes())?;
-                    return Err(e);
-                }
-            };
-
-            let key = {
-                let k_path = match server_conf.find_pubkey_by_name(&keyname) {
-                    Ok(kk) => kk,
-                    Err(e) => {
-                        stream.write_all(e.to_string().as_bytes())?;
-                        return Err(e);
-                    }
-                };
-
-                let mut content = String::new();
-                let _ = File::open(k_path)?.read_to_string(&mut content);
-                Rsa::public_key_from_pem(&content.as_bytes())?
-            };
-
-            let dw = match DataWrapper::decrypt_with_pubkey(data, keyname, key) {
-                Ok(d) => d,
-                Err(e) => {
-                    stream.write_all(e.to_string().as_bytes())?;
-                    return Err(e);
-                }
-            };
-
-            dw.data
-        } else {
-            match String::from_utf8(buf_vec) {
-                Ok(s) => s,
-                Err(e) => return Err(ioError::new(ErrorKind::InvalidInput, e)),
-            }
-        };
+        let received_comm = String::from_utf8(payload.to_vec())
+            .map_err(|e| ioError::new(ErrorKind::InvalidInput, e))?;
 
         match day_care(kig, received_comm) {
             Ok(resp) => {
@@ -1121,7 +1001,7 @@ fn server_info(config: ServerConfig, kg: &Kindergarten, name: Option<&String>) -
             // load paths
             resp.push_str("Server configs:\n");
             resp.push_str(&format!("Load paths: {:?}\n", config.load_paths));
-            resp.push_str(&format!("Encrypt mode: {:?}\n", config.encrypt_mode));
+            resp.push_str(&format!("Noise mode: {:?}\n", config.noise_mode));
         }
         _ => {}
     }

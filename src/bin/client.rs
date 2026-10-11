@@ -150,12 +150,7 @@ fn main() {
         }];
     }
 
-    // Here to check/make encrypt data
-    let data_2_server = if let Ok(d) = cache_command.generate_encrypt_wapper() {
-        d.encrypt_to_bytes().unwrap()
-    } else {
-        cache_command.as_bytes()
-    };
+    let data_2_server = cache_command.as_bytes();
 
     //send same commands to all servers
     for mut stream in streams {
