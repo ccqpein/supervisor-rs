@@ -1,4 +1,4 @@
-use super::child::{child_output::OutputMode, Config};
+use super::child::{Config, child_output::OutputMode};
 use super::client;
 use super::kindergarten::*;
 use super::logger;
@@ -251,7 +251,6 @@ impl ServerConfig {
             format!("Cannot found '{}' file in load path", filename),
         ))
     }
-
 
     /// recursive check if config have dead loop prehook call
     fn recursive_check(
@@ -622,7 +621,10 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
         let (server_key, auth_clients) = {
             let kg = kig.lock().unwrap();
             let k = kg.noise_key.clone().ok_or_else(|| {
-                ioError::new(ErrorKind::NotFound, "Noise server private key is not loaded")
+                ioError::new(
+                    ErrorKind::NotFound,
+                    "Noise server private key is not loaded",
+                )
             })?;
             let ak = kg.noise_authorized_keys.clone().unwrap_or_default();
             (k, ak)
@@ -630,8 +632,8 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
 
         let mut session = crate::noise::server_handshake(stream, &server_key, &auth_clients)?;
         let cmd_bytes = session.recv()?;
-        let received_comm = String::from_utf8(cmd_bytes)
-            .map_err(|e| ioError::new(ErrorKind::InvalidInput, e))?;
+        let received_comm =
+            String::from_utf8(cmd_bytes).map_err(|e| ioError::new(ErrorKind::InvalidInput, e))?;
 
         match day_care(kig, received_comm) {
             Ok(resp) => {
@@ -644,7 +646,7 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
             }
         }
     } else {
-        let mut buf = [0; 100 + 4096];
+        let mut buf = [0; 1024];
         let n = stream.read(&mut buf)?;
 
         let payload = match buf[..n].iter().position(|&b| b == 0) {
@@ -953,7 +955,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             return Err(ioError::new(
                 ErrorKind::InvalidInput,
                 logger::timelog("not support"),
-            ))
+            ));
         }
     }
 }

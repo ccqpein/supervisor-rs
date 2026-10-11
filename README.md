@@ -6,6 +6,10 @@
   - [Server Side](#server-side)
   - [Client Side](#client-side)
   - [Noise Protocol Encryption](#noise-protocol-encryption)
+    - [1. Generating Keys](#1-generating-keys)
+    - [2. Server Configuration](#2-server-configuration)
+    - [3. Client Configuration & Server Verification](#3-client-configuration--server-verification)
+    - [4. Authorization Behavior: Encryption-Only vs. Mutual Authentication](#4-authorization-behavior-encryption-only-vs-mutual-authentication)
   - [Startup-with feature](#startup-with-feature)
   - [Repeat feature](#repeat-feature)
     - [How to stop repeat](#how-to-stop-repeat)
@@ -301,7 +305,7 @@ If a client attempts to connect with an unrecognized public key, the server reje
 
 **Does the client side also need an `authorized_keys/` folder?**
 
-**Yes!** In mutual authentication (`Noise_XX`), the server sends its static public key to the client during the handshake. To protect against Man-in-the-Middle (MITM) attacks and rogue servers, the client verifies the server's public key against an authorized server keys directory or file.
+**Yes, for full verification!** In mutual authentication (`Noise_XX`), the server sends its static public key to the client during the handshake. To protect against Man-in-the-Middle (MITM) attacks and rogue servers, the client verifies the server's public key against an authorized server keys directory or file.
 
 If the server's public key is not in the client's `authorized_keys`, the client terminates the connection immediately.
 
@@ -312,13 +316,32 @@ If the server's public key is not in the client's `authorized_keys`, the client 
 mkdir -p ~/.supervisor/authorized_keys
 cp /path/to/server.pub ~/.supervisor/authorized_keys/
 
-# Send encrypted command
+# Send encrypted command with full mutual verification
 supervisor-rs-client restart child0 \
   -o 192.168.1.1 \
   --noise \
   -k ~/.supervisor/client.key \
   --noise-authorized-keys ~/.supervisor/authorized_keys/
+
+# Send encrypted command without server whitelisting (encryption-only)
+supervisor-rs-client restart child0 \
+  -o 192.168.1.1 \
+  --noise \
+  -k ~/.supervisor/client.key
 ```
+
+#### 4. Authorization Behavior: Encryption-Only vs. Mutual Authentication ####
+
+> [!IMPORTANT]
+> **What happens if `authorized_keys` is omitted or empty?**
+>
+> | Side | When `authorized_keys` is EMPTY | When `authorized_keys` is CONFIGURED |
+> | :--- | :--- | :--- |
+> | **Client** | **Accepts ANY server** (traffic is fully encrypted, but server identity is not verified). | **Rejects** any server whose public key is not in the list (`PermissionDenied`). |
+> | **Server** | **Accepts ANY client** (traffic is fully encrypted, but any client with a valid Noise key can connect). | **Rejects** any client whose public key is not in the list (`PermissionDenied`). |
+>
+> - **Encryption-Only Mode**: Simply supply private keys (`-k` on client, `noise_key` on server) without specifying authorized keys. All communications are protected with ChaCha20-Poly1305 and Forward Secrecy, but no public key whitelisting is enforced.
+> - **Mutual Authentication Mode**: Add public keys to `authorized_keys` on both sides. Both client and server verify each other's identities and reject any untrusted peers.
 
 ### Startup-with feature ###
 
