@@ -35,11 +35,14 @@ impl TunnelStream {
         target_port: u16,
     ) -> Result<Self, String> {
         let sock = SocketAddr::new(ipaddr, 22);
-        let tcp = TcpStream::connect_timeout(&sock, Duration::new(5, 0))
+        let tcp = TcpStream::connect_timeout(&sock, Duration::from_secs(5))
             .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
+        let _ = tcp.set_read_timeout(Some(Duration::from_secs(5)));
+        let _ = tcp.set_write_timeout(Some(Duration::from_secs(5)));
 
         let mut sess = Session::new().map_err(|e| e.to_string())?;
         sess.set_tcp_stream(tcp);
+        sess.set_timeout(5000); // 5 seconds timeout for all SSH channel and session operations
         sess.handshake().map_err(|e| e.to_string())?;
 
         let mut agent = sess.agent().map_err(|e| e.to_string())?;

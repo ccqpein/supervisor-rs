@@ -271,8 +271,10 @@ impl ConnectionStream {
         match ip {
             IpFields::Normal(addr) => {
                 let sock = SocketAddr::new(addr, 33889);
-                let tcp = TcpStream::connect_timeout(&sock, Duration::new(5, 0))
+                let tcp = TcpStream::connect_timeout(&sock, Duration::from_secs(5))
                     .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
+                let _ = tcp.set_read_timeout(Some(Duration::from_secs(5)));
+                let _ = tcp.set_write_timeout(Some(Duration::from_secs(5)));
                 if let Some(priv_key) = noise_key {
                     let auth_srv = authorized_servers.unwrap_or(&[]);
                     let session = crate::noise::client_handshake(tcp, priv_key, auth_srv)

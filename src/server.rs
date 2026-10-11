@@ -13,6 +13,7 @@ use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
 use std::sync::mpsc::Sender;
 use std::thread;
+use std::time::Duration;
 use yaml_rust::YamlLoader;
 
 use std::sync::{Arc, Mutex};
@@ -615,6 +616,8 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
 
 /// get client TCP stream and send to channel
 fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result<String> {
+    let _ = stream.set_read_timeout(Some(Duration::from_secs(5)));
+    let _ = stream.set_write_timeout(Some(Duration::from_secs(5)));
     let noise_mode = kig.lock().unwrap().noise_mode;
 
     if noise_mode {

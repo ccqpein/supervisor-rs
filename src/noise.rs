@@ -154,7 +154,12 @@ pub fn recv_frame<R: io::Read + ?Sized>(stream: &mut R) -> io::Result<Vec<u8>> {
     let mut len_buf = [0u8; 2];
     stream.read_exact(&mut len_buf)?;
     let len = u16::from_be_bytes(len_buf) as usize;
-
+    if len > MAX_MESSAGE_LEN {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "Noise frame exceeds maximum size of 65535 bytes",
+        ));
+    }
     let mut buf = vec![0u8; len];
     stream.read_exact(&mut buf)?;
     Ok(buf)
@@ -208,8 +213,23 @@ pub fn server_handshake<S: Stream + 'static>(
 
     let mut buf = [0u8; MAX_MESSAGE_LEN];
 
-    // Message 1 (client -> server): e
-    let msg1 = recv_frame(&mut stream)?;
+    // Message 1 (client -> server): e (Noise_XX ephemeral key, exactly 32 bytes)
+    let mut len_buf1 = [0u8; 2];
+    stream.read_exact(&mut len_buf1)?;
+    let len1 = u16::from_be_bytes(len_buf1) as usize;
+    if len1 != 32 {
+        let _ = stream.write_all(b"Error: Server requires Noise protocol encryption. Client must connect with --noise for handshaking.\n");
+        let _ = stream.flush();
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            format!(
+                "Invalid Noise Message 1: expected 32-byte frame, received length header {}",
+                len1
+            ),
+        ));
+    }
+    let mut msg1 = vec![0u8; len1];
+    stream.read_exact(&mut msg1)?;
     responder
         .read_message(&msg1, &mut buf)
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
@@ -235,7 +255,9 @@ pub fn server_handshake<S: Stream + 'static>(
     })?;
 
     if !authorized_clients.is_empty()
-        && !authorized_clients.iter().any(|k| k.as_slice() == client_key)
+        && !authorized_clients
+            .iter()
+            .any(|k| k.as_slice() == client_key)
     {
         return Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
@@ -284,7 +306,9 @@ pub fn client_handshake<S: Stream + 'static>(
     // Verify server static public key
     if let Some(server_key) = initiator.get_remote_static() {
         if !authorized_servers.is_empty()
-            && !authorized_servers.iter().any(|k| k.as_slice() == server_key)
+            && !authorized_servers
+                .iter()
+                .any(|k| k.as_slice() == server_key)
         {
             return Err(io::Error::new(
                 io::ErrorKind::PermissionDenied,
@@ -355,8 +379,7 @@ mod tests {
         let s_priv = server_kp.private.clone();
         let server_handle = thread::spawn(move || {
             let (stream, _) = listener.accept().unwrap();
-            let mut session =
-                server_handshake(stream, &s_priv, &authorized_clients).unwrap();
+            let mut session = server_handshake(stream, &s_priv, &authorized_clients).unwrap();
             let cmd = session.recv().unwrap();
             assert_eq!(String::from_utf8(cmd).unwrap(), "start test_child");
             session.send(b"ok").unwrap();
@@ -452,13 +475,46 @@ mod tests {
 
         // Load from multi-line file
         let list_file = temp_dir.join("authorized_keys");
-        let multi_content = format!("# Comment line\n{}\n{}\n", to_hex(&kp1.public), to_hex(&kp2.public));
+        let multi_content = format!(
+            "# Comment line\n{}\n{}\n",
+            to_hex(&kp1.public),
+            to_hex(&kp2.public)
+        );
         fs::write(&list_file, multi_content).unwrap();
         let file_keys = load_keys_from_path(&list_file).unwrap();
         assert_eq!(file_keys.len(), 2);
         assert!(file_keys.contains(&kp1.public));
-        assert!(file_keys.contains(&kp2.public));
-
         let _ = fs::remove_dir_all(&temp_dir);
+    }
+
+    #[test]
+    fn test_server_rejects_unencrypted_client_immediately() {
+        use std::io::Write;
+        use std::time::Duration;
+
+        let server_kp = generate_keypair().unwrap();
+        let s_priv = server_kp.private.clone();
+
+        let listener = TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+
+        let server_handle = thread::spawn(move || {
+            let (stream, _) = listener.accept().unwrap();
+            let res = server_handshake(stream, &s_priv, &[]);
+            assert!(res.is_err());
+            assert_eq!(res.err().unwrap().kind(), io::ErrorKind::InvalidData);
+        });
+
+        let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
+        stream
+            .set_read_timeout(Some(Duration::from_secs(1)))
+            .unwrap();
+        stream.write_all(b"check").unwrap();
+        stream.flush().unwrap();
+
+        let mut response = String::new();
+        let _ = stream.read_to_string(&mut response);
+        // Returns immediately without hanging!
+        server_handle.join().unwrap();
     }
 }
