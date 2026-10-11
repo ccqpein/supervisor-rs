@@ -797,14 +797,29 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         }
 
         client::Ops::Stop => {
+            if command.all {
+                match kg.stop_all() {
+                    Ok(_) => return Ok("stop all children success".to_string()),
+                    Err(e) => return Err(e),
+                }
+            }
+
+            if command.child_name.is_none() {
+                return Err(ioError::new(
+                    ErrorKind::InvalidInput,
+                    logger::timelog("you have to give which child you want to stop"),
+                ));
+            }
+
+            let child_name = command.child_name.as_ref().unwrap();
             let post_hook =
-                if let Some(conf) = kg.get_child_config(command.child_name.as_ref().unwrap()) {
+                if let Some(conf) = kg.get_child_config(child_name) {
                     conf.get_hook(&String::from("posthook"))
                 } else {
                     None
                 };
 
-            match kg.stop(command.child_name.as_ref().unwrap()) {
+            match kg.stop(child_name) {
                 Ok(_) => {
                     if let Some(post_hook_command) = post_hook {
                         // connect to supervisor itself
@@ -828,7 +843,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
 
                     return Ok(format!(
                         "stop {} success",
-                        command.child_name.as_ref().unwrap()
+                        child_name
                     ));
                 }
                 Err(e) => Err(e),
@@ -937,7 +952,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         client::Ops::Kill => {
             let mut last_will = String::new();
             // step1: stop all
-            if let Err(e) = kg.stop(&"all".to_string()) {
+            if let Err(e) = kg.stop_all() {
                 last_will.push_str(&format!("there is error when stop all {}", e));
             }
 

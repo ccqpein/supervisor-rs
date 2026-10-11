@@ -322,10 +322,16 @@ supervisor-rs-client <COMMAND> [OPTIONS]
 | `start` | `<CHILD>` | Starts a new child process. If the child process panics or exits immediately, the start command reports initiation success; use `check` to verify live status. |
 | `restart` | `<CHILD>` | Restarts an already running child process. Fails if the child is not currently active (use `start` or `trystart` instead). |
 | `trystart` | `<CHILD>` | **Idempotent CI/CD command**: If the child is already running, it restarts it; if it is not running, it starts it. |
-| `stop` | `<CHILD>` | Stops a running child process. Supply a specific child name or pass `stop all` to terminate all managed processes. |
+| `stop` | `<CHILD>` \| `-A, --all` | Stops a running child process by name (e.g. `stop all` stops the child named "all"), or supply `--all` / `-A` to terminate all managed processes. |
 | `info` | `[CHILD]` *(optional)* | Retrieves runtime information, load paths, and configuration state from the server. |
 | `kill` | `[CHILD]` *(optional)* | Terminates the server daemon itself and returns its final status response. |
 | `keygen` | `[OUT]` *(optional)* | Generates a new Noise Curve25519 keypair. If an output prefix is supplied, creates `<out>.key` and `<out>.pub`. |
+
+> [!WARNING]
+> **Breaking Change (`stop` behavior):**
+> Previously, `supervisor-rs-client stop all` was a magic reserved command that stopped all running processes.
+> `all` is no longer a magic keyword. Running `supervisor-rs-client stop all` now attempts to stop the child process whose config is named `"all"`.
+> To terminate all running child processes, you must use `supervisor-rs-client stop --all` (or `supervisor-rs-client stop -A`).
 
 ### Client Options
 
@@ -351,9 +357,17 @@ supervisor-rs-client restart web
 # CI/CD deployment: start if stopped, restart if running
 supervisor-rs-client trystart web
 
-# Stop a single process or all processes
+# Stop a single process
 supervisor-rs-client stop web
-supervisor-rs-client stop all
+
+# Stop all processes
+supervisor-rs-client stop --all
+supervisor-rs-client stop -A
+
+# NOTE (Breaking Change):
+# supervisor-rs-client stop all
+# The command above now stops the child process named "all"!
+# It no longer stops all children. To terminate all processes, use --all or -A instead.
 
 # Query status on a remote host over direct TCP
 supervisor-rs-client check -o 192.168.1.10
@@ -670,10 +684,10 @@ jobs:
 Understanding process lifecycle boundaries during unexpected events is critical for production operations:
 
 - **Daemon Termination / Kill**: If `supervisor-rs-server` terminates unexpectedly, crashes, or is killed via `supervisor-rs-client kill`, **running child processes are NOT killed**. They are detached and safely reparented to the system init process (PID 1).
-- **Graceful Host Shutdown**: If you need to stop all managed processes before shutting down the daemon or host, issue `stop all` first:
+- **Graceful Host Shutdown**: If you need to stop all managed processes before shutting down the daemon or host, issue `stop --all` first:
   ```bash
   # 1. Gracefully terminate all child applications
-  supervisor-rs-client stop all
+  supervisor-rs-client stop --all
 
   # 2. Terminate the supervisor daemon
   supervisor-rs-client kill

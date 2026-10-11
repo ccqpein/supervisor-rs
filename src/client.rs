@@ -121,6 +121,7 @@ pub struct Command {
     pub child_name: Option<String>,
     pub prep: Option<Vec<Prepositions>>,
     pub obj: Option<Vec<String>>,
+    pub all: bool,
 }
 
 impl Command {
@@ -130,6 +131,7 @@ impl Command {
             child_name: None,
             prep: None,
             obj: None,
+            all: false,
         }
     }
 
@@ -183,11 +185,14 @@ impl Command {
     }
 
 
-    /// ops + ' ' + childname
+    /// ops + ' ' + childname (or --all)
     /// and there are no Prepositions and Objects inside
     pub fn as_bytes(&self) -> Vec<u8> {
         let mut cache = self.op.to_string().as_bytes().to_vec();
-        if self.child_name.is_some() {
+        if self.all {
+            cache.push(b' ');
+            cache.append(&mut b"--all".to_vec());
+        } else if self.child_name.is_some() {
             cache.push(b' ');
             cache.append(
                 &mut self
@@ -368,6 +373,7 @@ mod tests {
                 child_name: Some("child".to_string()),
                 prep: Some(vec![Prepositions::On, Prepositions::On]),
                 obj: Some(vec!["host".to_string(), "host1".to_string()]),
+                all: false,
             },
             Command::new_from_str(case0).unwrap()
         );
@@ -380,6 +386,7 @@ mod tests {
                 child_name: Some("child".to_string()),
                 prep: Some(vec![Prepositions::On]),
                 obj: Some(vec!["host1, host2".to_string()]),
+                all: false,
             },
             Command::new_from_str(case1).unwrap()
         );
@@ -392,6 +399,7 @@ mod tests {
             child_name: Some("child".to_string()),
             prep: None,
             obj: None,
+            all: false,
         };
         assert_eq!(case0.prep_obj_pairs(), None);
     }

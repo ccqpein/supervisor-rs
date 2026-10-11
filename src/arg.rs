@@ -117,6 +117,7 @@ impl ClientArgs {
 
         let op = self.command.to_op();
         let child_name = self.command.child_name().map(|s| s.to_string());
+        let all = self.command.is_all();
 
         let mut prep = vec![];
         let mut obj = vec![];
@@ -137,6 +138,7 @@ impl ClientArgs {
             child_name,
             prep: prep_opt,
             obj: obj_opt,
+            all,
         })
     }
 }
@@ -161,8 +163,13 @@ pub enum ClientSubcommand {
     /// Stop running child on server
     #[command(alias = "Stop")]
     Stop {
-        /// Name of the child process, or 'all' to stop all
-        child: String,
+        /// Name of the child process
+        #[arg(required_unless_present = "all", conflicts_with = "all")]
+        child: Option<String>,
+
+        /// Stop all running children
+        #[arg(short = 'A', short_alias = 'a', long = "all")]
+        all: bool,
     },
 
     /// Try to start child: restart if running, start if stopped
@@ -210,12 +217,19 @@ impl ClientSubcommand {
         match self {
             ClientSubcommand::Restart { child } => Some(child),
             ClientSubcommand::Start { child } => Some(child),
-            ClientSubcommand::Stop { child } => Some(child),
+            ClientSubcommand::Stop { child, .. } => child.as_deref(),
             ClientSubcommand::Trystart { child } => Some(child),
             ClientSubcommand::Check { child } => child.as_deref(),
             ClientSubcommand::Info { child } => child.as_deref(),
             ClientSubcommand::Kill { child } => child.as_deref(),
             ClientSubcommand::Keygen { .. } => None,
+        }
+    }
+
+    pub fn is_all(&self) -> bool {
+        match self {
+            ClientSubcommand::Stop { all, .. } => *all,
+            _ => false,
         }
     }
 
@@ -350,13 +364,42 @@ mod tests {
         let cmd = Command::new_from_str(vec!["stop", "c1"]).unwrap();
         assert_eq!(cmd.op, Ops::Stop);
         assert_eq!(cmd.child_name, Some("c1".to_string()));
+        assert!(!cmd.all);
         assert_eq!(cmd.as_bytes(), b"stop c1");
 
-        // stop all
+        // stop child named 'all' (now targets child 'all', not all children)
         let cmd = Command::new_from_str(vec!["stop", "all"]).unwrap();
         assert_eq!(cmd.op, Ops::Stop);
         assert_eq!(cmd.child_name, Some("all".to_string()));
+        assert!(!cmd.all);
         assert_eq!(cmd.as_bytes(), b"stop all");
+
+        // stop --all
+        let cmd = Command::new_from_str(vec!["stop", "--all"]).unwrap();
+        assert_eq!(cmd.op, Ops::Stop);
+        assert_eq!(cmd.child_name, None);
+        assert!(cmd.all);
+        assert_eq!(cmd.as_bytes(), b"stop --all");
+
+        // stop -A
+        let cmd = Command::new_from_str(vec!["stop", "-A"]).unwrap();
+        assert_eq!(cmd.op, Ops::Stop);
+        assert_eq!(cmd.child_name, None);
+        assert!(cmd.all);
+        assert_eq!(cmd.as_bytes(), b"stop --all");
+
+        // stop -a
+        let cmd = Command::new_from_str(vec!["stop", "-a"]).unwrap();
+        assert_eq!(cmd.op, Ops::Stop);
+        assert_eq!(cmd.child_name, None);
+        assert!(cmd.all);
+        assert_eq!(cmd.as_bytes(), b"stop --all");
+
+        // stop with neither child nor --all fails
+        assert!(Command::new_from_str(vec!["stop"]).is_err());
+
+        // stop with both child and --all fails
+        assert!(Command::new_from_str(vec!["stop", "c1", "--all"]).is_err());
 
         // trystart variations
         let cmd = Command::new_from_str(vec!["trystart", "c1"]).unwrap();
