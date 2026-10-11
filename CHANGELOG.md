@@ -1,3 +1,16 @@
++ `v0.9.1`
+  - Breaking change: `stop all` now stops the child process named `"all"`; added `--all` / `-A` flags to stop all running processes
+  - Removed internal magic keyword `"all"` in `Kindergarten::stop`, resolving naming conflicts with managed child processes
+  - Comprehensive README redesign: added 60-second Quick Start, CI/CD recipes (`trystart`), and production operations guide (log outlets with `logrotate`, security hardening, Systemd integration)
+  - Fixed output documentation to reflect actual supported modes (`create` and `append`)
+
++ `v0.9.0`
+  - Replaced custom RSA encryption with Noise Protocol Framework (`Noise_XX_25519_ChaChaPoly_BLAKE2s`) for end-to-end mutual authentication and forward secrecy
+  - Enhanced SSH-agent tunneling (`ssh://user@host`) via direct-tcpip channels, composable with Noise encryption
+  - Added `keygen` CLI command and flags to generate 32-byte Curve25519 keypairs and derive public keys
+  - Refactored CLI argument parsing to Clap v4 while maintaining backwards compatibility for 0.x preposition syntax
+  - Upgraded codebase to Rust edition 2024
+
 + `v0.8.5`
   - config has its own location path
   - run the child with `.current_dir` and the **config location path**
