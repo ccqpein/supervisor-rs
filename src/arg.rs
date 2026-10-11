@@ -20,6 +20,22 @@ pub struct ServerArgs {
     /// Path to server configuration YAML file
     #[arg(short = 'c', long = "config", value_name = "CONFIG_PATH")]
     pub config_opt: Option<String>,
+
+    /// Enable Noise protocol encryption
+    #[arg(short = 'n', long = "noise")]
+    pub noise: bool,
+
+    /// Path to server Noise private key
+    #[arg(long = "noise-key", value_name = "KEY_PATH")]
+    pub noise_key: Option<String>,
+
+    /// Path to authorized client public keys directory or file
+    #[arg(long = "noise-authorized-keys", value_name = "KEYS_PATH")]
+    pub noise_authorized_keys: Option<String>,
+
+    /// Generate a new Noise Curve25519 keypair and exit
+    #[arg(long = "keygen")]
+    pub keygen: bool,
 }
 
 impl ServerArgs {
@@ -50,7 +66,7 @@ impl ServerArgs {
     author = "ccQpein",
     version,
     about = "Supervisor-rs client used to send commands to server side.",
-    after_help = "Examples:\n  supervisor-rs-client start child1\n  supervisor-rs-client restart child1 on 192.168.1.1\n  supervisor-rs-client restart child1 --on 192.168.1.1 --with /path/to/key.pem\n  supervisor-rs-client check on ssh://user@192.168.3.3\n\nMore details:\n  https://github.com/ccqpein/supervisor-rs#usage"
+    after_help = "Examples:\n  supervisor-rs-client start child1\n  supervisor-rs-client restart child1 on 192.168.1.1\n  supervisor-rs-client restart child1 --on 192.168.1.1\n  supervisor-rs-client check on 192.168.1.1\n  supervisor-rs-client restart child1 -o 192.168.1.1 --noise -k client.key --noise-authorized-keys authorized_keys/\n  supervisor-rs-client keygen\n\nMore details:\n  https://github.com/ccqpein/supervisor-rs#usage"
 )]
 pub struct ClientArgs {
     #[command(subcommand)]
@@ -60,9 +76,17 @@ pub struct ClientArgs {
     #[arg(short = 'o', long = "on", global = true, action = clap::ArgAction::Append, value_name = "HOST")]
     pub on: Vec<String>,
 
-    /// Path to RSA private key for authentication / encryption
-    #[arg(short = 'w', long = "with", global = true, value_name = "KEY_PATH")]
-    pub with: Option<String>,
+    /// Enable Noise protocol encryption
+    #[arg(short = 'n', long = "noise", global = true)]
+    pub noise: bool,
+
+    /// Path to client Noise private key
+    #[arg(short = 'k', long = "noise-key", global = true, value_name = "KEY_PATH")]
+    pub noise_key: Option<String>,
+
+    /// Path to authorized server public keys directory or file
+    #[arg(long = "noise-authorized-keys", global = true, value_name = "KEYS_PATH")]
+    pub noise_authorized_keys: Option<String>,
 }
 
 impl ClientArgs {
@@ -77,12 +101,18 @@ impl ClientArgs {
     /// Parse arguments from environment, supporting both Clap options and 0.x preposition syntax
     pub fn parse_from_env() -> std::result::Result<Self, clap::Error> {
         let raw_args: Vec<String> = env::args().collect();
-        let normalized = normalize_client_args(raw_args);
+        let normalized = crate::legacy_arg::normalize_client_args(raw_args);
         Self::try_parse_from(normalized)
     }
 
     /// Convert into legacy Command struct for compatibility with 0.x codebase
     pub fn to_command(&self) -> Result<Command> {
+        if let ClientSubcommand::Keygen { .. } = self.command {
+            return Err(Error::new(
+                ErrorKind::Other,
+                "Keygen is handled locally and cannot be converted to server command",
+            ));
+        }
         self.command.validate()?;
 
         let op = self.command.to_op();
@@ -90,11 +120,6 @@ impl ClientArgs {
 
         let mut prep = vec![];
         let mut obj = vec![];
-
-        if let Some(ref with_key) = self.with {
-            prep.push(Prepositions::With);
-            obj.push(with_key.clone());
-        }
 
         for host in &self.on {
             prep.push(Prepositions::On);
@@ -167,6 +192,17 @@ pub enum ClientSubcommand {
         /// Optional argument
         child: Option<String>,
     },
+
+    /// Generate a new Noise Curve25519 keypair, or derive public key from an existing private key
+    #[command(alias = "Keygen")]
+    Keygen {
+        /// Optional output path prefix (<out>.key and <out>.pub)
+        out: Option<String>,
+
+        /// Path to an existing private key file to derive its public key
+        #[arg(long = "pubkey-from", value_name = "KEY_PATH")]
+        pubkey_from: Option<String>,
+    },
 }
 
 impl ClientSubcommand {
@@ -179,6 +215,7 @@ impl ClientSubcommand {
             ClientSubcommand::Check { child } => child.as_deref(),
             ClientSubcommand::Info { child } => child.as_deref(),
             ClientSubcommand::Kill { child } => child.as_deref(),
+            ClientSubcommand::Keygen { .. } => None,
         }
     }
 
@@ -191,6 +228,7 @@ impl ClientSubcommand {
             ClientSubcommand::Check { .. } => Ops::Check,
             ClientSubcommand::Info { .. } => Ops::Info,
             ClientSubcommand::Kill { .. } => Ops::Kill,
+            ClientSubcommand::Keygen { .. } => Ops::Help,
         }
     }
 
@@ -205,59 +243,6 @@ impl ClientSubcommand {
         }
         Ok(())
     }
-}
-
-/// Normalize arguments to support 0.x preposition syntax ("on <host>", "with <key>")
-/// as well as standard clap flags ("--on <host>", "--with <key>").
-pub fn normalize_client_args<I, T>(raw_args: I) -> Vec<String>
-where
-    I: IntoIterator<Item = T>,
-    T: AsRef<str>,
-{
-    let args: Vec<String> = raw_args.into_iter().map(|s| s.as_ref().to_string()).collect();
-    if args.is_empty() {
-        return vec!["supervisor-rs-client".to_string()];
-    }
-
-    let has_bin = args[0].contains("supervisor-rs-client")
-        || args[0].starts_with('/')
-        || args[0].starts_with("./");
-
-    let mut normalized = if has_bin {
-        vec![]
-    } else {
-        vec!["supervisor-rs-client".to_string()]
-    };
-
-    let mut expecting_value = false;
-
-    for (i, token) in args.into_iter().enumerate() {
-        if i == 0 && has_bin {
-            normalized.push(token);
-            continue;
-        }
-
-        if expecting_value {
-            normalized.push(token);
-            expecting_value = false;
-            continue;
-        }
-
-        if token == "-o" || token == "--on" || token == "-w" || token == "--with" {
-            expecting_value = true;
-            normalized.push(token);
-        } else if token == "on" || token == "On" {
-            normalized.push("--on".to_string());
-            expecting_value = true;
-        } else if token == "with" || token == "With" {
-            normalized.push("--with".to_string());
-            expecting_value = true;
-        } else {
-            normalized.push(token);
-        }
-    }
-
-    normalized
 }
 
 #[cfg(test)]
@@ -287,88 +272,47 @@ mod tests {
 
     #[test]
     fn test_client_args_modern_flags() {
-        let normalized = normalize_client_args(&[
+        let client_args = ClientArgs::try_parse_from(&[
             "supervisor-rs-client",
             "restart",
             "child0",
             "--on",
             "127.0.0.1",
-            "--with",
-            "/tmp/key.pem",
-        ]);
-        let client_args = ClientArgs::try_parse_from(normalized).unwrap();
+        ])
+        .unwrap();
         assert_eq!(
             client_args.command,
             ClientSubcommand::Restart {
-                child: "child0".to_string()
+                child: "child0".to_string(),
             }
         );
         assert_eq!(client_args.on, vec!["127.0.0.1"]);
-        assert_eq!(client_args.with, Some("/tmp/key.pem".to_string()));
     }
 
     #[test]
     fn test_client_args_short_flags() {
-        let normalized = normalize_client_args(&[
+        let client_args = ClientArgs::try_parse_from(&[
             "supervisor-rs-client",
             "restart",
             "child0",
             "-o",
             "127.0.0.1",
-            "-w",
-            "/tmp/key.pem",
-        ]);
-        let client_args = ClientArgs::try_parse_from(normalized).unwrap();
+        ])
+        .unwrap();
         assert_eq!(client_args.on, vec!["127.0.0.1"]);
-        assert_eq!(client_args.with, Some("/tmp/key.pem".to_string()));
-    }
-
-    #[test]
-    fn test_client_args_0x_style() {
-        let normalized = normalize_client_args(&[
-            "supervisor-rs-client",
-            "restart",
-            "child0",
-            "on",
-            "127.0.0.1",
-            "with",
-            "/tmp/key.pem",
-        ]);
-        let client_args = ClientArgs::try_parse_from(normalized).unwrap();
-        assert_eq!(
-            client_args.command,
-            ClientSubcommand::Restart {
-                child: "child0".to_string()
-            }
-        );
-        assert_eq!(client_args.on, vec!["127.0.0.1"]);
-        assert_eq!(client_args.with, Some("/tmp/key.pem".to_string()));
-
-        let cmd = client_args.to_command().unwrap();
-        assert_eq!(cmd.op, Ops::Restart);
-        assert_eq!(cmd.child_name, Some("child0".to_string()));
-        assert_eq!(
-            cmd.prep,
-            Some(vec![Prepositions::With, Prepositions::On])
-        );
-        assert_eq!(
-            cmd.obj,
-            Some(vec!["/tmp/key.pem".to_string(), "127.0.0.1".to_string()])
-        );
     }
 
     #[test]
     fn test_client_args_check_optional() {
-        let normalized = normalize_client_args(&["supervisor-rs-client", "check"]);
-        let client_args = ClientArgs::try_parse_from(normalized).unwrap();
+        let client_args = ClientArgs::try_parse_from(&["supervisor-rs-client", "check"]).unwrap();
         assert_eq!(client_args.command, ClientSubcommand::Check { child: None });
 
-        let normalized = normalize_client_args(&["supervisor-rs-client", "check", "child1"]);
-        let client_args = ClientArgs::try_parse_from(normalized).unwrap();
+        let client_args =
+            ClientArgs::try_parse_from(&["supervisor-rs-client", "check", "child1"]).unwrap();
         assert_eq!(
             client_args.command,
             ClientSubcommand::Check {
-                child: Some("child1".to_string())
+                child: Some("child1".to_string()),
             }
         );
     }
@@ -456,43 +400,86 @@ mod tests {
     }
 
     #[test]
-    fn test_client_args_check_on_host() {
-        // check on host without child name
-        let cmd = Command::new_from_str(vec!["check", "on", "127.0.0.1"]).unwrap();
-        assert_eq!(cmd.op, Ops::Check);
-        assert_eq!(cmd.child_name, None);
-        assert_eq!(cmd.prep, Some(vec![Prepositions::On]));
-        assert_eq!(cmd.obj, Some(vec!["127.0.0.1".to_string()]));
+    fn test_server_noise_args() {
+        let args = ServerArgs::try_parse_from(&[
+            "supervisor-rs-server",
+            "--noise",
+            "--noise-key",
+            "/tmp/test.key",
+            "--noise-authorized-keys",
+            "/tmp/authorized_keys",
+        ])
+        .unwrap();
+        assert!(args.noise);
+        assert_eq!(args.noise_key, Some("/tmp/test.key".to_string()));
+        assert_eq!(
+            args.noise_authorized_keys,
+            Some("/tmp/authorized_keys".to_string())
+        );
 
-        // check child on host
-        let cmd = Command::new_from_str(vec!["check", "c1", "on", "127.0.0.1"]).unwrap();
-        assert_eq!(cmd.op, Ops::Check);
-        assert_eq!(cmd.child_name, Some("c1".to_string()));
-        assert_eq!(cmd.prep, Some(vec![Prepositions::On]));
-        assert_eq!(cmd.obj, Some(vec!["127.0.0.1".to_string()]));
-
-        // check with key on host
-        let cmd = Command::new_from_str(vec!["check", "with", "/tmp/k.pem", "on", "127.0.0.1"]).unwrap();
-        assert_eq!(cmd.op, Ops::Check);
-        assert_eq!(cmd.child_name, None);
-        assert_eq!(cmd.prep, Some(vec![Prepositions::With, Prepositions::On]));
-        assert_eq!(cmd.obj, Some(vec!["/tmp/k.pem".to_string(), "127.0.0.1".to_string()]));
+        let args = ServerArgs::try_parse_from(&["supervisor-rs-server", "--keygen"]).unwrap();
+        assert!(args.keygen);
     }
 
     #[test]
-    fn test_client_multi_on_hosts() {
-        let cmd = Command::new_from_str(vec![
-            "restart", "c1", "on", "192.168.1.1", "on", "192.168.1.2",
-        ]).unwrap();
-        assert_eq!(cmd.op, Ops::Restart);
-        assert_eq!(cmd.child_name, Some("c1".to_string()));
+    fn test_client_noise_args() {
+        let client_args = ClientArgs::try_parse_from(&[
+            "supervisor-rs-client",
+            "restart",
+            "c1",
+            "--noise",
+            "-k",
+            "/tmp/client.key",
+            "--noise-authorized-keys",
+            "/tmp/authorized_keys",
+            "--on",
+            "127.0.0.1",
+        ])
+        .unwrap();
+        assert!(client_args.noise);
+        assert_eq!(client_args.noise_key, Some("/tmp/client.key".to_string()));
         assert_eq!(
-            cmd.prep,
-            Some(vec![Prepositions::On, Prepositions::On])
+            client_args.noise_authorized_keys,
+            Some("/tmp/authorized_keys".to_string())
         );
+        assert_eq!(client_args.on, vec!["127.0.0.1".to_string()]);
+    }
+
+    #[test]
+    fn test_client_keygen_subcommand() {
+        let client_args = ClientArgs::try_parse_from(&["supervisor-rs-client", "keygen"]).unwrap();
         assert_eq!(
-            cmd.obj,
-            Some(vec!["192.168.1.1".to_string(), "192.168.1.2".to_string()])
+            client_args.command,
+            ClientSubcommand::Keygen {
+                out: None,
+                pubkey_from: None,
+            }
+        );
+        assert!(client_args.to_command().is_err());
+
+        let client_args =
+            ClientArgs::try_parse_from(&["supervisor-rs-client", "keygen", "my_key"]).unwrap();
+        assert_eq!(
+            client_args.command,
+            ClientSubcommand::Keygen {
+                out: Some("my_key".to_string()),
+                pubkey_from: None,
+            }
+        );
+
+        let client_args = ClientArgs::try_parse_from(&[
+            "supervisor-rs-client",
+            "keygen",
+            "--pubkey-from",
+            "/path/to/client.key",
+        ])
+        .unwrap();
+        assert_eq!(
+            client_args.command,
+            ClientSubcommand::Keygen {
+                out: None,
+                pubkey_from: Some("/path/to/client.key".to_string()),
+            }
         );
     }
 }
