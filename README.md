@@ -75,12 +75,6 @@ Install directly via Cargo:
 cargo install supervisor-rs
 ```
 
-Or download pre-compiled release binaries directly from GitHub Releases.
-
-This installs two binaries:
-- `supervisor-rs-server`: The supervisor daemon.
-- `supervisor-rs-client`: The CLI tool used to control daemons.
-
 ### 60-Second Setup
 
 #### 1. Define a Child Process
