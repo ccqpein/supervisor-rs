@@ -2,6 +2,7 @@ pub mod arg;
 pub mod child;
 pub mod client;
 pub mod kindergarten;
+pub mod legacy_arg;
 pub mod logger;
 pub mod noise;
 pub mod server;

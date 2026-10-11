@@ -35,6 +35,26 @@ pub fn generate_keypair() -> Result<snow::Keypair, snow::Error> {
     builder.generate_keypair()
 }
 
+/// Derive a 32-byte Curve25519 public key from a 32-byte private key
+pub fn derive_public_key(priv_key: &[u8]) -> io::Result<Vec<u8>> {
+    use snow::resolvers::CryptoResolver;
+    let mut dh = snow::resolvers::DefaultResolver
+        .resolve_dh(&snow::params::DHChoice::Curve25519)
+        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "DH resolver not available"))?;
+    if priv_key.len() != dh.priv_len() {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            format!(
+                "Invalid private key length: expected {}, got {}",
+                dh.priv_len(),
+                priv_key.len()
+            ),
+        ));
+    }
+    dh.set(priv_key);
+    Ok(dh.pubkey().to_vec())
+}
+
 /// Parse a 32-byte key from file content (supports 64 hex characters or 32 raw bytes)
 pub fn parse_key(content: &[u8]) -> io::Result<Vec<u8>> {
     let s = String::from_utf8_lossy(content).trim().to_string();
@@ -312,6 +332,9 @@ mod tests {
         let hex_pub = to_hex(&kp.public);
         let parsed = parse_key(hex_pub.as_bytes()).unwrap();
         assert_eq!(parsed, kp.public);
+
+        let derived = derive_public_key(&kp.private).unwrap();
+        assert_eq!(derived, kp.public);
     }
 
     #[test]

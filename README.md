@@ -165,12 +165,12 @@ supervisor-rs-client <COMMAND> [OPTIONS]
 - `-h, --help`: Print help information (supports both global help and subcommand help, e.g. `supervisor-rs-client start --help`)
 - `-V, --version`: Print version information
 
-**Backward-compatible syntax:**
-
-The legacy preposition syntax `on <HOST>` is still fully supported:
-- `supervisor-rs-client restart child0 on 127.0.0.1` is equivalent to `supervisor-rs-client restart child0 -o 127.0.0.1`
-- `supervisor-rs-client restart child0 on 192.168.1.1 on 192.168.1.2` is equivalent to `supervisor-rs-client restart child0 -o 192.168.1.1 -o 192.168.1.2`
-- `supervisor-rs-client restart child0 on "192.168.1.1, 192.168.1.2"` is equivalent to `supervisor-rs-client restart child0 --on "192.168.1.1, 192.168.1.2"`
+> [!NOTE]
+> **Legacy Syntax Notice:**
+> The `on <HOST>` preposition syntax is legacy (0.x) syntax supported for backwards compatibility:
+> - `supervisor-rs-client restart child0 on 127.0.0.1` *(legacy)*
+> - `supervisor-rs-client restart child0 on 192.168.1.1 on 192.168.1.2` *(legacy)*
+> - `supervisor-rs-client restart child0 on "192.168.1.1, 192.168.1.2"` *(legacy)*
 
 **Commands:**
 
@@ -191,18 +191,22 @@ The legacy preposition syntax `on <HOST>` is still fully supported:
 # Restart child0 locally
 supervisor-rs-client restart child0
 
-# Restart child0 on a remote host (using -o / --on or preposition syntax)
+# Restart child0 on a remote host
 supervisor-rs-client restart child0 -o 192.168.1.1
+# [Legacy] preposition syntax:
 supervisor-rs-client restart child0 on 192.168.1.1
 
 # Send to multiple hosts
 supervisor-rs-client restart child0 -o 192.168.1.1 -o 192.168.1.2
 supervisor-rs-client restart child0 --on "192.168.1.1, 192.168.1.2"
+# [Legacy] preposition syntax:
 supervisor-rs-client restart child0 on 192.168.1.1 on 192.168.1.2
 
 # Check status of running children
 supervisor-rs-client check
 supervisor-rs-client check -o 192.168.1.1
+# [Legacy] preposition syntax:
+supervisor-rs-client check on 192.168.1.1
 
 # Stop all children
 supervisor-rs-client stop all
@@ -239,16 +243,34 @@ supervisor-rs-server --keygen
 # Generate keys and save directly to files (<prefix>.key and <prefix>.pub)
 supervisor-rs-client keygen ~/.supervisor/client
 # Creates:
-#   ~/.supervisor/client.key  (Private key, hex format)
-#   ~/.supervisor/client.pub  (Public key, hex format)
+#   ~/.supervisor/client.key  (Private key, hex format - keep this secret on client)
+#   ~/.supervisor/client.pub  (Public key, hex format - copy this to server's authorized_clients/)
 
 supervisor-rs-client keygen /etc/supervisor/server
 # Creates:
-#   /etc/supervisor/server.key
-#   /etc/supervisor/server.pub
+#   /etc/supervisor/server.key  (Server private key)
+#   /etc/supervisor/server.pub  (Server public key)
+```
+
+**Extract public key from an existing private key:**
+If you only have `client.key` and need its public key:
+```bash
+# Print public key hex to stdout:
+supervisor-rs-client keygen --pubkey-from ~/.supervisor/client.key
+
+# Or derive and save directly to client.pub:
+supervisor-rs-client keygen ~/.supervisor/client --pubkey-from ~/.supervisor/client.key
 ```
 
 #### 2. Server Configuration ####
+
+To authorize a client on the server, place the client's public key (`client.pub`) into the server's `authorized_clients/` directory:
+
+```bash
+# On the server machine:
+mkdir -p /etc/supervisor/authorized_clients/
+cp /path/to/client.pub /etc/supervisor/authorized_clients/client_laptop.pub
+```
 
 Enable Noise encryption in `server.yml`:
 
@@ -457,7 +479,7 @@ supervisor-rs-client check -o ssh://ubuntu@192.168.3.3
 # Restart a child process via SSH tunnel
 supervisor-rs-client restart child0 -o ssh://ubuntu@192.168.3.3
 
-# Legacy preposition syntax is also supported
+# [Legacy] preposition syntax:
 supervisor-rs-client restart child0 on ssh://ubuntu@192.168.3.3
 ```
 

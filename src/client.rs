@@ -151,7 +151,7 @@ impl Command {
             return Ok(Self::new(Ops::Help));
         }
 
-        let normalized = crate::arg::normalize_client_args(s);
+        let normalized = crate::legacy_arg::normalize_client_args(s);
         let client_args = match crate::arg::ClientArgs::try_parse_from(normalized) {
             Ok(args) => args,
             Err(e) => {

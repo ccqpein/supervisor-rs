@@ -3,8 +3,9 @@ use std::fs;
 use std::net::IpAddr;
 use std::path::Path;
 use std::str::FromStr;
-use supervisor_rs::arg::{normalize_client_args, ClientArgs, ClientSubcommand};
+use supervisor_rs::arg::{ClientArgs, ClientSubcommand};
 use supervisor_rs::client::*;
+use supervisor_rs::legacy_arg::normalize_client_args;
 use supervisor_rs::noise;
 
 fn main() {
@@ -16,7 +17,36 @@ fn main() {
         }
     };
 
-    if let ClientSubcommand::Keygen { ref out } = client_args.command {
+    if let ClientSubcommand::Keygen {
+        ref out,
+        ref pubkey_from,
+    } = client_args.command
+    {
+        if let Some(priv_path) = pubkey_from {
+            match noise::load_key_from_file(priv_path) {
+                Ok(priv_bytes) => match noise::derive_public_key(&priv_bytes) {
+                    Ok(pub_bytes) => {
+                        let pub_hex = noise::to_hex(&pub_bytes);
+                        if let Some(path_prefix) = out {
+                            let pub_path = format!("{}.pub", path_prefix);
+                            if let Err(e) = fs::write(&pub_path, &pub_hex) {
+                                eprintln!("Failed to write public key to {}: {}", pub_path, e);
+                                return;
+                            }
+                            println!("Derived Noise (Curve25519) Public Key from {}:", priv_path);
+                            println!("Wrote public key to: {}", pub_path);
+                        } else {
+                            println!("Derived Noise (Curve25519) Public Key from {}:", priv_path);
+                            println!("Public Key (hex): {}", pub_hex);
+                        }
+                    }
+                    Err(e) => eprintln!("Failed to derive public key: {}", e),
+                },
+                Err(e) => eprintln!("Failed to load private key from {}: {}", priv_path, e),
+            }
+            return;
+        }
+
         match noise::generate_keypair() {
             Ok(kp) => {
                 let priv_hex = noise::to_hex(&kp.private);
