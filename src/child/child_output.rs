@@ -1,5 +1,5 @@
+use anyhow::{bail, Result};
 use std::fmt;
-use std::io::{Error as ioError, ErrorKind, Result};
 use yaml_rust::Yaml;
 
 /// Output mode struct. Create or Append
@@ -28,10 +28,7 @@ impl Output {
         let lst = match input.into_vec() {
             Some(lst) => lst,
             None => {
-                return Err(ioError::new(
-                    ErrorKind::InvalidData,
-                    format!("output format wrong"),
-                ));
+                bail!("output format wrong");
             }
         };
 
@@ -58,10 +55,7 @@ impl Output {
                             temp.0 = "stdout".to_string()
                         }
                         None => {
-                            return Err(ioError::new(
-                                ErrorKind::InvalidData,
-                                format!("stdout no path"),
-                            ));
+                            bail!("stdout no path");
                         }
                     },
                     Some("stderr") => match m.as_str() {
@@ -70,17 +64,11 @@ impl Output {
                             temp.0 = "stderr".to_string()
                         }
                         None => {
-                            return Err(ioError::new(
-                                ErrorKind::InvalidData,
-                                format!("stderr no path"),
-                            ));
+                            bail!("stderr no path");
                         }
                     },
                     _ => {
-                        return Err(ioError::new(
-                            ErrorKind::InvalidData,
-                            format!("output including illegal field"),
-                        ));
+                        bail!("output including illegal field");
                     }
                 }
             }

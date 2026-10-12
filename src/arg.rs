@@ -1,6 +1,6 @@
+use anyhow::{bail, Result};
 use clap::{Parser, Subcommand};
 use std::env;
-use std::io::{Error, ErrorKind, Result};
 
 use crate::client::{Command, Ops, Prepositions};
 
@@ -108,10 +108,7 @@ impl ClientArgs {
     /// Convert into legacy Command struct for compatibility with 0.x codebase
     pub fn to_command(&self) -> Result<Command> {
         if let ClientSubcommand::Keygen { .. } = self.command {
-            return Err(Error::new(
-                ErrorKind::Other,
-                "Keygen is handled locally and cannot be converted to server command",
-            ));
+            bail!("Keygen is handled locally and cannot be converted to server command");
         }
         self.command.validate()?;
 
@@ -249,10 +246,7 @@ impl ClientSubcommand {
     pub fn validate(&self) -> Result<()> {
         if let Some(name) = self.child_name() {
             if Ops::is_op(name) {
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    "child name cannot be command",
-                ));
+                bail!("child name cannot be command");
             }
         }
         Ok(())

@@ -1,7 +1,7 @@
 use super::kindergarten::*;
 use super::server;
 use super::*;
-use std::io::{Error as ioError, ErrorKind, Result};
+use anyhow::{bail, Result};
 use std::sync::{Arc, Mutex};
 use std::{thread, time};
 
@@ -27,10 +27,7 @@ impl Timer {
     /// generate new timer from child name and child config
     pub fn new_from_conf(name: String, conf: child::Config) -> Result<Self> {
         if !conf.is_repeat() {
-            return Err(ioError::new(
-                ErrorKind::InvalidInput,
-                format!("config is not repeatable"),
-            ));
+            bail!("config is not repeatable");
         }
 
         Ok(Self::new(

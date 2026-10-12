@@ -1,3 +1,4 @@
+use anyhow::{anyhow, bail, Result};
 use std::fs::{self, File};
 use std::io::{self, Read};
 use std::path::Path;
@@ -11,51 +12,44 @@ pub fn to_hex(bytes: &[u8]) -> String {
 }
 
 /// Convert hex string to bytes
-pub fn from_hex(s: &str) -> io::Result<Vec<u8>> {
+pub fn from_hex(s: &str) -> Result<Vec<u8>> {
     let s = s.trim();
     if s.len() % 2 != 0 {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Invalid hex string length",
-        ));
+        bail!("Invalid hex string length");
     }
-    (0..s.len())
-        .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(&s[i..i + 2], 16)
-                .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))
-        })
-        .collect()
+    let mut res = Vec::with_capacity(s.len() / 2);
+    for i in (0..s.len()).step_by(2) {
+        let byte = u8::from_str_radix(&s[i..i + 2], 16)?;
+        res.push(byte);
+    }
+    Ok(res)
 }
 
 /// Generate a new 32-byte Curve25519 keypair for Noise protocol
-pub fn generate_keypair() -> Result<snow::Keypair, snow::Error> {
-    let builder = snow::Builder::new(NOISE_PATTERN.parse().unwrap());
-    builder.generate_keypair()
+pub fn generate_keypair() -> Result<snow::Keypair> {
+    let builder = snow::Builder::new(NOISE_PATTERN.parse()?);
+    Ok(builder.generate_keypair()?)
 }
 
 /// Derive a 32-byte Curve25519 public key from a 32-byte private key
-pub fn derive_public_key(priv_key: &[u8]) -> io::Result<Vec<u8>> {
+pub fn derive_public_key(priv_key: &[u8]) -> Result<Vec<u8>> {
     use snow::resolvers::CryptoResolver;
     let mut dh = snow::resolvers::DefaultResolver
         .resolve_dh(&snow::params::DHChoice::Curve25519)
-        .ok_or_else(|| io::Error::new(io::ErrorKind::Other, "DH resolver not available"))?;
+        .ok_or_else(|| anyhow!("DH resolver not available"))?;
     if priv_key.len() != dh.priv_len() {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            format!(
-                "Invalid private key length: expected {}, got {}",
-                dh.priv_len(),
-                priv_key.len()
-            ),
-        ));
+        bail!(
+            "Invalid private key length: expected {}, got {}",
+            dh.priv_len(),
+            priv_key.len()
+        );
     }
     dh.set(priv_key);
     Ok(dh.pubkey().to_vec())
 }
 
 /// Parse a 32-byte key from file content (supports 64 hex characters or 32 raw bytes)
-pub fn parse_key(content: &[u8]) -> io::Result<Vec<u8>> {
+pub fn parse_key(content: &[u8]) -> Result<Vec<u8>> {
     let s = String::from_utf8_lossy(content).trim().to_string();
     let cleaned: String = s.chars().filter(|c| c.is_ascii_hexdigit()).collect();
     if cleaned.len() == 64 {
@@ -68,17 +62,14 @@ pub fn parse_key(content: &[u8]) -> io::Result<Vec<u8>> {
     if content.len() == 32 {
         return Ok(content.to_vec());
     }
-    Err(io::Error::new(
-        io::ErrorKind::InvalidData,
-        format!(
-            "Invalid 32-byte key (expected 64 hex characters or 32 raw bytes, got {} bytes)",
-            content.len()
-        ),
-    ))
+    bail!(
+        "Invalid 32-byte key (expected 64 hex characters or 32 raw bytes, got {} bytes)",
+        content.len()
+    );
 }
 
 /// Load a 32-byte key from a specified file
-pub fn load_key_from_file(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
+pub fn load_key_from_file(path: impl AsRef<Path>) -> Result<Vec<u8>> {
     let mut file = File::open(path.as_ref())?;
     let mut buf = Vec::new();
     file.read_to_end(&mut buf)?;
@@ -86,13 +77,10 @@ pub fn load_key_from_file(path: impl AsRef<Path>) -> io::Result<Vec<u8>> {
 }
 
 /// Load keys from either a directory of key files or a single file
-pub fn load_keys_from_path(path: impl AsRef<Path>) -> io::Result<Vec<Vec<u8>>> {
+pub fn load_keys_from_path(path: impl AsRef<Path>) -> Result<Vec<Vec<u8>>> {
     let p = path.as_ref();
     if !p.exists() {
-        return Err(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Path not found: {:?}", p),
-        ));
+        bail!("Path not found: {:?}", p);
     }
 
     let mut keys = Vec::new();
@@ -135,12 +123,9 @@ pub trait Stream: io::Read + io::Write + Send {}
 impl<T: io::Read + io::Write + Send> Stream for T {}
 
 /// Send a 2-byte length-prefixed frame
-pub fn send_frame<W: io::Write + ?Sized>(stream: &mut W, data: &[u8]) -> io::Result<()> {
+pub fn send_frame<W: io::Write + ?Sized>(stream: &mut W, data: &[u8]) -> Result<()> {
     if data.len() > MAX_MESSAGE_LEN {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidInput,
-            "Noise frame exceeds maximum size of 65535 bytes",
-        ));
+        bail!("Noise frame exceeds maximum size of 65535 bytes");
     }
     let len_bytes = (data.len() as u16).to_be_bytes();
     stream.write_all(&len_bytes)?;
@@ -150,15 +135,12 @@ pub fn send_frame<W: io::Write + ?Sized>(stream: &mut W, data: &[u8]) -> io::Res
 }
 
 /// Read a 2-byte length-prefixed frame
-pub fn recv_frame<R: io::Read + ?Sized>(stream: &mut R) -> io::Result<Vec<u8>> {
+pub fn recv_frame<R: io::Read + ?Sized>(stream: &mut R) -> Result<Vec<u8>> {
     let mut len_buf = [0u8; 2];
     stream.read_exact(&mut len_buf)?;
     let len = u16::from_be_bytes(len_buf) as usize;
     if len > MAX_MESSAGE_LEN {
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            "Noise frame exceeds maximum size of 65535 bytes",
-        ));
+        bail!("Noise frame exceeds maximum size of 65535 bytes");
     }
     let mut buf = vec![0u8; len];
     stream.read_exact(&mut buf)?;
@@ -171,25 +153,29 @@ pub struct NoiseSession {
     pub transport: snow::TransportState,
 }
 
+impl std::fmt::Debug for NoiseSession {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("NoiseSession").finish()
+    }
+}
+
 impl NoiseSession {
     /// Send encrypted plaintext message
-    pub fn send(&mut self, plaintext: &[u8]) -> io::Result<()> {
+    pub fn send(&mut self, plaintext: &[u8]) -> Result<()> {
         let mut cipher_buf = vec![0u8; plaintext.len() + 16]; // 16-byte Poly1305 MAC tag
         let len = self
             .transport
-            .write_message(plaintext, &mut cipher_buf)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+            .write_message(plaintext, &mut cipher_buf)?;
         send_frame(&mut self.stream, &cipher_buf[..len])
     }
 
     /// Receive and decrypt message
-    pub fn recv(&mut self) -> io::Result<Vec<u8>> {
+    pub fn recv(&mut self) -> Result<Vec<u8>> {
         let cipher_frame = recv_frame(&mut self.stream)?;
         let mut plain_buf = vec![0u8; cipher_frame.len()];
         let len = self
             .transport
-            .read_message(&cipher_frame, &mut plain_buf)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+            .read_message(&cipher_frame, &mut plain_buf)?;
         plain_buf.truncate(len);
         Ok(plain_buf)
     }
@@ -205,11 +191,10 @@ pub fn server_handshake<S: Stream + 'static>(
     mut stream: S,
     server_priv_key: &[u8],
     authorized_clients: &[Vec<u8>],
-) -> io::Result<NoiseSession> {
-    let mut responder = snow::Builder::new(NOISE_PATTERN.parse().unwrap())
+) -> Result<NoiseSession> {
+    let mut responder = snow::Builder::new(NOISE_PATTERN.parse()?)
         .local_private_key(server_priv_key)
-        .build_responder()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        .build_responder()?;
 
     let mut buf = [0u8; MAX_MESSAGE_LEN];
 
@@ -220,38 +205,26 @@ pub fn server_handshake<S: Stream + 'static>(
     if len1 != 32 {
         let _ = stream.write_all(b"Error: Server requires Noise protocol encryption. Client must connect with --noise for handshaking.\n");
         let _ = stream.flush();
-        return Err(io::Error::new(
-            io::ErrorKind::InvalidData,
-            format!(
-                "Invalid Noise Message 1: expected 32-byte frame, received length header {}",
-                len1
-            ),
-        ));
+        bail!(
+            "Invalid Noise Message 1: expected 32-byte frame, received length header {}",
+            len1
+        );
     }
     let mut msg1 = vec![0u8; len1];
     stream.read_exact(&mut msg1)?;
-    responder
-        .read_message(&msg1, &mut buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    responder.read_message(&msg1, &mut buf)?;
 
     // Message 2 (server -> client): e, ee, s, es
-    let len2 = responder
-        .write_message(&[], &mut buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let len2 = responder.write_message(&[], &mut buf)?;
     send_frame(&mut stream, &buf[..len2])?;
 
     // Message 3 (client -> server): s, se
     let msg3 = recv_frame(&mut stream)?;
-    responder
-        .read_message(&msg3, &mut buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    responder.read_message(&msg3, &mut buf)?;
 
     // Verify client static public key
     let client_key = responder.get_remote_static().ok_or_else(|| {
-        io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            "No client static public key received",
-        )
+        anyhow!("No client static public key received")
     })?;
 
     if !authorized_clients.is_empty()
@@ -259,18 +232,13 @@ pub fn server_handshake<S: Stream + 'static>(
             .iter()
             .any(|k| k.as_slice() == client_key)
     {
-        return Err(io::Error::new(
-            io::ErrorKind::PermissionDenied,
-            format!(
-                "Client public key [{}] is not authorized",
-                to_hex(client_key)
-            ),
-        ));
+        bail!(
+            "Client public key [{}] is not authorized",
+            to_hex(client_key)
+        );
     }
 
-    let transport = responder
-        .into_transport_mode()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let transport = responder.into_transport_mode()?;
 
     Ok(NoiseSession {
         stream: Box::new(stream),
@@ -283,25 +251,20 @@ pub fn client_handshake<S: Stream + 'static>(
     mut stream: S,
     client_priv_key: &[u8],
     authorized_servers: &[Vec<u8>],
-) -> io::Result<NoiseSession> {
-    let mut initiator = snow::Builder::new(NOISE_PATTERN.parse().unwrap())
+) -> Result<NoiseSession> {
+    let mut initiator = snow::Builder::new(NOISE_PATTERN.parse()?)
         .local_private_key(client_priv_key)
-        .build_initiator()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+        .build_initiator()?;
 
     let mut buf = [0u8; MAX_MESSAGE_LEN];
 
     // Message 1 (client -> server): e
-    let len1 = initiator
-        .write_message(&[], &mut buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let len1 = initiator.write_message(&[], &mut buf)?;
     send_frame(&mut stream, &buf[..len1])?;
 
     // Message 2 (server -> client): e, ee, s, es
     let msg2 = recv_frame(&mut stream)?;
-    initiator
-        .read_message(&msg2, &mut buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    initiator.read_message(&msg2, &mut buf)?;
 
     // Verify server static public key
     if let Some(server_key) = initiator.get_remote_static() {
@@ -310,25 +273,18 @@ pub fn client_handshake<S: Stream + 'static>(
                 .iter()
                 .any(|k| k.as_slice() == server_key)
         {
-            return Err(io::Error::new(
-                io::ErrorKind::PermissionDenied,
-                format!(
-                    "Server public key [{}] is not in client's authorized_keys",
-                    to_hex(server_key)
-                ),
-            ));
+            bail!(
+                "Server public key [{}] is not in client's authorized_keys",
+                to_hex(server_key)
+            );
         }
     }
 
     // Message 3 (client -> server): s, se
-    let len3 = initiator
-        .write_message(&[], &mut buf)
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let len3 = initiator.write_message(&[], &mut buf)?;
     send_frame(&mut stream, &buf[..len3])?;
 
-    let transport = initiator
-        .into_transport_mode()
-        .map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))?;
+    let transport = initiator.into_transport_mode()?;
 
     Ok(NoiseSession {
         stream: Box::new(stream),
@@ -412,7 +368,7 @@ mod tests {
             let (stream, _) = listener.accept().unwrap();
             let res = server_handshake(stream, &s_priv, &authorized_clients);
             assert!(res.is_err());
-            assert_eq!(res.err().unwrap().kind(), io::ErrorKind::PermissionDenied);
+            assert!(res.unwrap_err().to_string().contains("is not authorized"));
         });
 
         let stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
@@ -445,7 +401,7 @@ mod tests {
         let stream = TcpStream::connect(("127.0.0.1", port)).unwrap();
         let res = client_handshake(stream, &client_kp.private, &authorized_servers);
         assert!(res.is_err());
-        assert_eq!(res.err().unwrap().kind(), io::ErrorKind::PermissionDenied);
+        assert!(res.unwrap_err().to_string().contains("not in client's authorized_keys"));
 
         server_handle.join().unwrap();
     }
@@ -502,7 +458,7 @@ mod tests {
             let (stream, _) = listener.accept().unwrap();
             let res = server_handshake(stream, &s_priv, &[]);
             assert!(res.is_err());
-            assert_eq!(res.err().unwrap().kind(), io::ErrorKind::InvalidData);
+            assert!(res.unwrap_err().to_string().contains("Invalid Noise Message 1"));
         });
 
         let mut stream = TcpStream::connect(("127.0.0.1", port)).unwrap();

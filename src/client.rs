@@ -1,5 +1,5 @@
+use anyhow::{anyhow, bail, Result};
 use std::io::prelude::*;
-use std::io::{Error, ErrorKind, Result};
 use std::net::{IpAddr, SocketAddr, TcpStream};
 use std::str;
 use std::time::Duration;
@@ -46,10 +46,7 @@ impl Ops {
             "Info" | "INFO" | "InFo" | "info" => Ok(Ops::Info),
             "Help" | "help" | "-h" => return Ok(Ops::Help),
             _ => {
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    "no legal operations input",
-                ));
+                bail!("no legal operations input");
             }
         }
     }
@@ -84,33 +81,19 @@ impl Prepositions {
     #[allow(dead_code)]
     fn from_str(s: &str) -> Result<Self> {
         match s {
-            "On" | "on" => return Ok(Prepositions::On),
-            "" => {
-                return Err(Error::new(ErrorKind::InvalidInput, "you miss prepositions"));
-            }
-            _ => {
-                return Err(Error::new(
-                    ErrorKind::InvalidInput,
-                    format!("does not support {}", s),
-                ));
-            }
+            "On" | "on" => Ok(Prepositions::On),
+            "" => bail!("you miss prepositions"),
+            _ => bail!("does not support {}", s),
         }
     }
 
     #[allow(dead_code)]
     fn is_prep(s: &str) -> bool {
-        if let Err(_) = Self::from_str(s) {
-            return false;
-        }
-        true
+        Self::from_str(s).is_ok()
     }
 
     pub fn is_on(&self) -> bool {
-        if *self == Self::On {
-            true
-        } else {
-            false
-        }
+        *self == Self::On
     }
 }
 
@@ -142,10 +125,7 @@ impl Command {
     /// Parse command using Clap with 0.x backwards compatibility
     pub fn new_from_str(s: Vec<&str>) -> Result<Self> {
         if s.is_empty() {
-            return Err(Error::new(
-                ErrorKind::InvalidInput,
-                "no legal operations input",
-            ));
+            bail!("no legal operations input");
         }
 
         if s[0] == "help" || s[0] == "Help" || s[0] == "-h" || s[0] == "--help" {
@@ -153,12 +133,8 @@ impl Command {
         }
 
         let normalized = crate::legacy_arg::normalize_client_args(s);
-        let client_args = match crate::arg::ClientArgs::try_parse_from(normalized) {
-            Ok(args) => args,
-            Err(e) => {
-                return Err(Error::new(ErrorKind::InvalidInput, e.to_string()));
-            }
-        };
+        let client_args = crate::arg::ClientArgs::try_parse_from(normalized)
+            .map_err(|e| anyhow!("{}", e))?;
 
         client_args.to_command()
     }
@@ -217,9 +193,9 @@ pub enum IpFields<'a> {
 /// ip address parser, support normal ip address and ssh protocol
 pub fn ip_fields_parser<'a>(
     ip_pair: impl Iterator<Item = &'a (&'a Prepositions, &'a String)>,
-) -> std::result::Result<Vec<IpFields<'a>>, String> {
+) -> Result<Vec<IpFields<'a>>> {
     let cache = ip_pair
-        .map(|(_, ip)| ip.split(|x| x == ',' || x == ' ').filter(|x| *x != ""))
+        .map(|(_, ip)| ip.split(|x| x == ',' || x == ' ').filter(|x| !x.is_empty()))
         .flatten();
 
     let mut result = vec![];
@@ -227,31 +203,28 @@ pub fn ip_fields_parser<'a>(
         if s.starts_with("ssh://") {
             result.push(ssh_address_parse(s)?);
         } else {
-            result.push(IpFields::Normal(
-                s.parse::<IpAddr>().map_err(|e| e.to_string())?,
-            ))
+            result.push(IpFields::Normal(s.parse::<IpAddr>()?));
         }
     }
     Ok(result)
 }
 
 /// ssh address has to follow 'ssh://username@ipaddress'
-fn ssh_address_parse(address: &str) -> std::result::Result<IpFields<'_>, String> {
+fn ssh_address_parse(address: &str) -> Result<IpFields<'_>> {
     let mut ll = address
         .split(|x| x == '/' || x == ':' || x == '@')
-        .filter(|s| *s != "");
+        .filter(|s| !s.is_empty());
 
     if ll.nth(0).unwrap_or("") != "ssh" {
-        return Err("Only support ssh protocol".to_string());
+        bail!("Only support ssh protocol");
     }
 
     Ok(IpFields::SshIp {
-        username: ll.nth(0).ok_or("Username parse wrong".to_string())?,
+        username: ll.nth(0).ok_or_else(|| anyhow!("Username parse wrong"))?,
         ipaddr: ll
             .nth(0)
-            .ok_or("IP address wrong".to_string())?
-            .parse::<IpAddr>()
-            .map_err(|e| e.to_string())?,
+            .ok_or_else(|| anyhow!("IP address wrong"))?
+            .parse::<IpAddr>()?,
     })
 }
 
@@ -263,7 +236,7 @@ pub enum ConnectionStream {
 
 impl ConnectionStream {
     /// generate new connections by using IpFields
-    pub fn new(ip: IpFields<'_>) -> std::result::Result<ConnectionStream, String> {
+    pub fn new(ip: IpFields<'_>) -> Result<ConnectionStream> {
         Self::new_with_noise(ip, None, None)
     }
 
@@ -272,18 +245,18 @@ impl ConnectionStream {
         ip: IpFields<'_>,
         noise_key: Option<&[u8]>,
         authorized_servers: Option<&[Vec<u8>]>,
-    ) -> std::result::Result<ConnectionStream, String> {
+    ) -> Result<ConnectionStream> {
         match ip {
             IpFields::Normal(addr) => {
                 let sock = SocketAddr::new(addr, 33889);
                 let tcp = TcpStream::connect_timeout(&sock, Duration::from_secs(5))
-                    .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
+                    .map_err(|_| anyhow!(CANNOT_REACH_SERVER_ERROR))?;
                 let _ = tcp.set_read_timeout(Some(Duration::from_secs(5)));
                 let _ = tcp.set_write_timeout(Some(Duration::from_secs(5)));
                 if let Some(priv_key) = noise_key {
                     let auth_srv = authorized_servers.unwrap_or(&[]);
                     let session = crate::noise::client_handshake(tcp, priv_key, auth_srv)
-                        .map_err(|e| format!("Noise handshake error: {}", e))?;
+                        .map_err(|e| anyhow!("Noise handshake error: {}", e))?;
                     Ok(Self::Noise(session, addr.to_string()))
                 } else {
                     Ok(Self::Tcp(tcp))
@@ -295,7 +268,7 @@ impl ConnectionStream {
                 if let Some(priv_key) = noise_key {
                     let auth_srv = authorized_servers.unwrap_or(&[]);
                     let session = crate::noise::client_handshake(tunnel, priv_key, auth_srv)
-                        .map_err(|e| format!("Noise handshake error over SSH tunnel: {}", e))?;
+                        .map_err(|e| anyhow!("Noise handshake error over SSH tunnel: {}", e))?;
                     Ok(Self::Noise(session, addr_str))
                 } else {
                     Ok(Self::Ssh(tunnel, addr_str))
@@ -308,14 +281,9 @@ impl ConnectionStream {
     pub fn send_comm(&mut self, comm: &[u8]) -> Result<String> {
         match self {
             ConnectionStream::Noise(session, _) => {
-                session
-                    .send(comm)
-                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-                let resp_bytes = session
-                    .recv()
-                    .map_err(|e| Error::new(ErrorKind::Other, e.to_string()))?;
-                String::from_utf8(resp_bytes)
-                    .map_err(|e| Error::new(ErrorKind::InvalidData, e.to_string()))
+                session.send(comm)?;
+                let resp_bytes = session.recv()?;
+                Ok(String::from_utf8(resp_bytes)?)
             }
             ConnectionStream::Tcp(s) => {
                 s.write_all(comm)?;
@@ -340,10 +308,10 @@ impl ConnectionStream {
         }
     }
 
-    pub fn address(&self) -> std::result::Result<String, String> {
+    pub fn address(&self) -> Result<String> {
         Ok(match self {
             ConnectionStream::Noise(_, addr) => addr.clone(),
-            ConnectionStream::Tcp(s) => s.peer_addr().map_err(|e| e.to_string())?.to_string(),
+            ConnectionStream::Tcp(s) => s.peer_addr()?.to_string(),
             ConnectionStream::Ssh(_, addr) => addr.clone(),
         })
     }
@@ -424,28 +392,28 @@ mod tests {
         let test0 = test.iter().map(|(a, b)| (a, b)).collect::<Vec<_>>();
 
         assert_eq!(
-            ip_fields_parser(vec![test0[0]].iter()),
-            Ok(vec![IpFields::Normal("127.0.0.1".parse().unwrap())]),
+            ip_fields_parser(vec![test0[0]].iter()).unwrap(),
+            vec![IpFields::Normal("127.0.0.1".parse().unwrap())],
         );
 
         assert_eq!(
-            ip_fields_parser(vec![test0[1]].iter()),
-            Ok(vec![
+            ip_fields_parser(vec![test0[1]].iter()).unwrap(),
+            vec![
                 IpFields::Normal("127.0.0.2".parse().unwrap()),
                 IpFields::Normal("127.0.0.3".parse().unwrap())
-            ]),
+            ],
         );
 
         assert_eq!(
-            ip_fields_parser(vec![test0[2]].iter()),
-            Ok(vec![IpFields::SshIp {
+            ip_fields_parser(vec![test0[2]].iter()).unwrap(),
+            vec![IpFields::SshIp {
                 username: "hello",
                 ipaddr: "127.0.0.1".parse().unwrap()
-            }]),
+            }],
         );
         assert_eq!(
-            ip_fields_parser(vec![test0[3]].iter()),
-            Ok(vec![
+            ip_fields_parser(vec![test0[3]].iter()).unwrap(),
+            vec![
                 IpFields::SshIp {
                     username: "hello",
                     ipaddr: "127.0.0.1".parse().unwrap()
@@ -454,7 +422,7 @@ mod tests {
                     username: "hello",
                     ipaddr: "127.0.0.2".parse().unwrap()
                 }
-            ]),
+            ],
         );
         assert!(ip_fields_parser(vec![test0[4]].iter()).is_err());
     }

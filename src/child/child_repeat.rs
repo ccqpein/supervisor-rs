@@ -1,5 +1,5 @@
+use anyhow::{bail, Result};
 use std::fmt;
-use std::io::{Error as ioError, ErrorKind, Result};
 use yaml_rust::Yaml;
 
 /// Repeat struct including the action and seconds
@@ -27,7 +27,7 @@ impl Repeat {
         let repeat = match input.as_hash() {
             Some(v) => v,
             None => {
-                return Err(ioError::new(ErrorKind::NotFound, format!("cannot found")));
+                bail!("cannot found");
             }
         };
 
@@ -44,20 +44,14 @@ impl Repeat {
                 }
             }
             None => {
-                return Err(ioError::new(
-                    ErrorKind::InvalidData,
-                    format!("seconds cannot be empty"),
-                ));
+                bail!("seconds cannot be empty");
             }
         };
 
         if result.seconds > 0 {
             Ok(result)
         } else {
-            Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!("seconds cannot less or equal 0"),
-            ))
+            bail!("seconds cannot less or equal 0");
         }
     }
 }

@@ -1,3 +1,4 @@
+use anyhow::{anyhow, bail, Result};
 use ssh2::{Channel, Session};
 use std::io::{self, Read, Write};
 use std::net::{SocketAddr, TcpStream};
@@ -33,24 +34,24 @@ impl TunnelStream {
         username: &str,
         ipaddr: std::net::IpAddr,
         target_port: u16,
-    ) -> Result<Self, String> {
+    ) -> Result<Self> {
         let sock = SocketAddr::new(ipaddr, 22);
         let tcp = TcpStream::connect_timeout(&sock, Duration::from_secs(5))
-            .map_err(|_| CANNOT_REACH_SERVER_ERROR)?;
+            .map_err(|_| anyhow!(CANNOT_REACH_SERVER_ERROR))?;
         let _ = tcp.set_read_timeout(Some(Duration::from_secs(5)));
         let _ = tcp.set_write_timeout(Some(Duration::from_secs(5)));
 
-        let mut sess = Session::new().map_err(|e| e.to_string())?;
+        let mut sess = Session::new()?;
         sess.set_tcp_stream(tcp);
         sess.set_timeout(5000); // 5 seconds timeout for all SSH channel and session operations
-        sess.handshake().map_err(|e| e.to_string())?;
+        sess.handshake()?;
 
-        let mut agent = sess.agent().map_err(|e| e.to_string())?;
-        agent.connect().map_err(|e| e.to_string())?;
-        agent.list_identities().map_err(|e| e.to_string())?;
+        let mut agent = sess.agent()?;
+        agent.connect()?;
+        agent.list_identities()?;
 
         let mut authed = false;
-        for identity in agent.identities().map_err(|e| e.to_string())? {
+        for identity in agent.identities()? {
             if agent.userauth(username, &identity).is_ok() {
                 authed = true;
                 break;
@@ -58,12 +59,12 @@ impl TunnelStream {
         }
 
         if !authed {
-            return Err("[Session(-18)] Username/PublicKey combination invalid".to_string());
+            bail!("[Session(-18)] Username/PublicKey combination invalid");
         }
 
         let channel = sess
             .channel_direct_tcpip("127.0.0.1", target_port, None)
-            .map_err(|e| format!("Failed to open direct-tcpip channel to port {}: {}", target_port, e))?;
+            .map_err(|e| anyhow!("Failed to open direct-tcpip channel to port {}: {}", target_port, e))?;
 
         Ok(TunnelStream { channel })
     }

@@ -1,8 +1,8 @@
 use super::child::Config;
 use super::logger;
 use super::server::*;
+use anyhow::{bail, Result};
 use std::collections::HashMap;
-use std::io::{Error as ioError, ErrorKind, Result};
 use std::process::Child;
 
 #[derive(Debug)]
@@ -75,10 +75,7 @@ impl Kindergarten {
         // check inside again (because "start" in server has checked once) here...
         // ...because prehook need check too, but it does not check in server
         if let Some(_) = self.has_child(name) {
-            return Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!("Cannot start child {}, it already exist.", name),
-            ));
+            bail!("Cannot start child {}, it already exist.", name);
         };
 
         // start new child
@@ -91,10 +88,7 @@ impl Kindergarten {
             }
             Err(e) => {
                 println!("{:?}", e);
-                return Err(ioError::new(
-                    ErrorKind::InvalidData,
-                    format!("Cannot start child {}", name),
-                ));
+                bail!("Cannot start child {}", name);
             }
         }
     }
@@ -117,10 +111,7 @@ impl Kindergarten {
     /// stop child, and delete it in kg, after this method, do not need delete child
     pub fn stop(&mut self, name: &String) -> Result<()> {
         if name == "" {
-            return Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!("you have to give which child you want to stop"),
-            ));
+            bail!("you have to give which child you want to stop");
         }
 
         // get id
@@ -131,10 +122,7 @@ impl Kindergarten {
 
         // check if this name of child in kindergarden
         if *id == 1 {
-            return Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!("{} not exsit, cannot stop", name),
-            ));
+            bail!("{} not exsit, cannot stop", name);
         }
 
         // get child_handle
@@ -144,10 +132,7 @@ impl Kindergarten {
         // kill old child
         if let Err(e) = child_handle.kill() {
             println!("{:?}", e);
-            return Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!("Cannot kill child {}, id is {}, err is {}", name, id, e),
-            ));
+            bail!("Cannot kill child {}, id is {}, err is {}", name, id, e);
         }
 
         match child_handle.wait() {
@@ -155,10 +140,7 @@ impl Kindergarten {
                 self.delete_by_name(name)?;
                 Ok(())
             }
-            Err(e) => Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!("Cannot kill child {}, id is {}, err is {}", name, id, e),
-            )),
+            Err(e) => bail!("Cannot kill child {}, id is {}, err is {}", name, id, e),
         }
     }
 
@@ -180,13 +162,10 @@ impl Kindergarten {
         // this guard check for name_list and id_list aren't has same number
         // it shall not happen
         if self.name_list.len() != self.id_list.len() {
-            return Err(ioError::new(
-                ErrorKind::InvalidData,
-                format!(
-                    "number of name_list not match id_list, something wrong: \n{:#?}\n{:#?}",
-                    self.name_list, self.id_list
-                ),
-            ));
+            bail!(
+                "number of name_list not match id_list, something wrong: \n{:#?}\n{:#?}",
+                self.name_list, self.id_list
+            );
         }
 
         let mut cache: Vec<String> = vec![];

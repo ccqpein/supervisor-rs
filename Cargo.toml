@@ -1,6 +1,6 @@
 [package]
 name = "supervisor-rs"
-version = "0.9.2"
+version = "0.9.3"
 authors = ["ccQpein"]
 edition = "2024"
 description = "Manage (Start/Stop/Restart/etc.) processings on server."
@@ -15,6 +15,7 @@ openssl-sys = { version = "0.9", features = ["vendored"] }
 ssh2 = "0.9"
 clap = { version = "4", features = ["derive"] }
 snow = "0.9"
+anyhow = "1"
 
 [[bin]]
 name = "supervisor-rs-server"

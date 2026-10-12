@@ -4,10 +4,11 @@ pub mod child_output;
 pub mod child_repeat;
 
 use super::logger;
+use anyhow::{bail, Result};
 use chrono::prelude::*;
 use std::fmt;
 use std::fs::File;
-use std::io::{Error as ioError, ErrorKind, Read, Result};
+use std::io::Read;
 use std::path::PathBuf;
 use std::time;
 use yaml_rust::YamlLoader;
@@ -58,73 +59,63 @@ impl Config {
     }
 
     fn read_from_str(input: &str) -> Result<Self> {
-        let temp = YamlLoader::load_from_str(input);
+        let temp = YamlLoader::load_from_str(input)?;
+        let doc = &temp[0];
 
-        let mut result: Self;
-        match temp {
-            Ok(docs) => {
-                let doc = &docs[0];
+        let mut result = Self::new(doc["command"].clone().into_string().unwrap());
 
-                result = Self::new(doc["command"].clone().into_string().unwrap());
-
-                // parse output field with Output
-                if let Ok(output) = Output::new(doc["output"].clone()) {
-                    // update stdout and stderr
-                    for (field, data) in output {
-                        if field == "stdout".to_string() {
-                            result.stdout = Some(data);
-                        } else if field == "stderr".to_string() {
-                            result.stderr = Some(data);
-                        }
-                    }
-                }
-
-                // parse repeat feature
-                result.repeat = match Repeat::new(&doc["repeat"]) {
-                    Ok(r) => Some(r),
-                    Err(e) => {
-                        if e.kind() != ErrorKind::NotFound {
-                            println!("{}", logger::timelog(&e.to_string()));
-                        }
-                        None
-                    }
-                };
-
-                // parse hook feature
-                result.hooks = match Hooks::new(&doc["hooks"]) {
-                    Ok(h) => Some(h),
-                    Err(e) => {
-                        if e.kind() != ErrorKind::NotFound {
-                            println!("{}", logger::timelog(&e.to_string()));
-                        }
-                        None
-                    }
+        // parse output field with Output
+        if let Ok(output) = Output::new(doc["output"].clone()) {
+            // update stdout and stderr
+            for (field, data) in output {
+                if field == "stdout".to_string() {
+                    result.stdout = Some(data);
+                } else if field == "stderr".to_string() {
+                    result.stderr = Some(data);
                 }
             }
-
-            Err(e) => return Err(ioError::new(ErrorKind::Other, e.to_string())),
         }
+
+        // parse repeat feature
+        result.repeat = if !doc["repeat"].is_badvalue() && !doc["repeat"].is_null() {
+            match Repeat::new(&doc["repeat"]) {
+                Ok(r) => Some(r),
+                Err(e) => {
+                    println!("{}", logger::timelog(&e.to_string()));
+                    None
+                }
+            }
+        } else {
+            None
+        };
+
+        // parse hook feature
+        result.hooks = if !doc["hooks"].is_badvalue() && !doc["hooks"].is_null() {
+            match Hooks::new(&doc["hooks"]) {
+                Ok(h) => Some(h),
+                Err(e) => {
+                    println!("{}", logger::timelog(&e.to_string()));
+                    None
+                }
+            }
+        } else {
+            None
+        };
 
         Ok(result)
     }
 
     pub fn read_from_yaml_file(filepath: PathBuf) -> Result<Self> {
-        let contents = File::open(filepath.to_str().unwrap().to_string());
+        let mut cont = File::open(&filepath)?;
         let mut string_result = String::new();
-        match contents {
-            Ok(mut cont) => {
-                let _ = cont.read_to_string(&mut string_result);
-                Self::read_from_str(string_result.as_str()).map(|mut c| {
-                    c.location_path = filepath
-                        .parent()
-                        .map(|p| p.to_str().unwrap().to_string())
-                        .unwrap_or(String::new());
-                    c
-                })
-            }
-
-            Err(e) => return Err(ioError::new(ErrorKind::Other, e.to_string().to_string())),
-        }
+        cont.read_to_string(&mut string_result)?;
+        Self::read_from_str(string_result.as_str()).map(|mut c| {
+            c.location_path = filepath
+                .parent()
+                .map(|p| p.to_str().unwrap().to_string())
+                .unwrap_or_default();
+            c
+        })
     }
 
     // split command and the argvs of command
@@ -147,27 +138,18 @@ impl Config {
 
     pub fn to_duration(&self) -> Result<time::Duration> {
         if !self.is_repeat() {
-            return Err(ioError::new(
-                ErrorKind::Other,
-                format!("do not find repeat value"),
-            ));
+            bail!("do not find repeat value");
         }
 
-        match self.repeat.as_ref().unwrap().seconds.clone() {
-            0 => Err(ioError::new(
-                ErrorKind::Other,
-                format!("repeat time cannot be 0"),
-            )),
+        match self.repeat.as_ref().unwrap().seconds {
+            0 => bail!("repeat time cannot be 0"),
             d => Ok(time::Duration::from_secs(d as u64)),
         }
     }
 
     pub fn repeat_command(&self) -> Result<String> {
         if !self.is_repeat() {
-            return Err(ioError::new(
-                ErrorKind::Other,
-                format!("do not find repeat value"),
-            ));
+            bail!("do not find repeat value");
         }
 
         Ok(self.repeat.as_ref().unwrap().action.clone())

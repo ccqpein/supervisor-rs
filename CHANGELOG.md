@@ -1,3 +1,7 @@
++ `v0.9.3`
+  - Migrated error handling to `anyhow::Result` across server, client, child processes, timers, and tunnels
+  - Included server version in `info` command response, and added support for querying `info version`
+
 + `v0.9.2`
   - Added `SKILL.md` agent skill guide and cheatsheet for AI coding assistants
 

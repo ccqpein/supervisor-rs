@@ -1,6 +1,6 @@
+use anyhow::{bail, Result};
 use std::collections::HashMap;
 use std::fmt;
-use std::io::{Error as ioError, ErrorKind, Result};
 
 use yaml_rust::Yaml;
 
@@ -29,10 +29,7 @@ impl Hooks {
         let hooks = match input.as_vec() {
             Some(hooks) => hooks,
             None => {
-                return Err(ioError::new(
-                    ErrorKind::NotFound,
-                    format!("hook format wrong"),
-                ));
+                bail!("hook format wrong");
             }
         };
 

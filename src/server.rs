@@ -1,14 +1,15 @@
-use super::child::{Config, child_output::OutputMode};
+use super::child::{child_output::OutputMode, Config};
 use super::client;
 use super::kindergarten::*;
 use super::logger;
 use super::timer::*;
 
+use anyhow::{anyhow, bail, Result};
 use chrono::prelude::*;
 use std::collections::HashSet;
 use std::fs;
 use std::fs::{File, OpenOptions};
-use std::io::{Error as ioError, ErrorKind, Read, Result, Write};
+use std::io::{Read, Write};
 use std::net::{TcpListener, TcpStream};
 use std::process::{Child, Command};
 use std::sync::mpsc::Sender;
@@ -66,7 +67,7 @@ impl ServerConfig {
 
     /// read content of config file then making config
     fn read_from_str(input: &str) -> Result<Self> {
-        let temp = YamlLoader::load_from_str(input);
+        let temp = YamlLoader::load_from_str(input)?;
         let mut result: Self = ServerConfig {
             load_paths: vec![],
 
@@ -82,109 +83,107 @@ impl ServerConfig {
             ipv6: false,
         };
 
-        match temp {
-            Ok(docs) => {
-                let doc = &docs[0];
+        let doc = &temp[0];
 
-                // load path parse
-                let paths = match doc["loadpaths"].as_vec() {
-                    Some(v) => v
-                        .iter()
-                        .map(|x| x.clone().into_string().unwrap())
-                        .collect::<Vec<String>>(),
-                    None => vec![],
-                };
-                result.load_paths = paths;
+        // load path parse
+        let paths = match doc["loadpaths"].as_vec() {
+            Some(v) => v
+                .iter()
+                .map(|x| x.clone().into_string().unwrap())
+                .collect::<Vec<String>>(),
+            None => vec![],
+        };
+        result.load_paths = paths;
 
-                // mode parse
-                let mode = match doc["mode"].as_str() {
-                    Some(v) => v.to_string(),
-                    None => "quiet".to_string(),
-                };
-                result.mode = mode;
+        // mode parse
+        let mode = match doc["mode"].as_str() {
+            Some(v) => v.to_string(),
+            None => "quiet".to_string(),
+        };
+        result.mode = mode;
 
-                // startup parse
-                let startup_children = match doc["startup"].as_vec() {
-                    Some(v) => Some(
-                        v.iter()
-                            .map(|x| x.clone().into_string().unwrap())
-                            .collect::<Vec<String>>(),
-                    ),
-                    None => None,
-                };
-                result.startup_list = startup_children;
+        // startup parse
+        let startup_children = match doc["startup"].as_vec() {
+            Some(v) => Some(
+                v.iter()
+                    .map(|x| x.clone().into_string().unwrap())
+                    .collect::<Vec<String>>(),
+            ),
+            None => None,
+        };
+        result.startup_list = startup_children;
 
-                // Noise configuration
-                let noise_mode = match doc["noise"].as_bool() {
-                    Some(b) => b,
-                    None => {
-                        if let Some(s) = doc["encrypt"].as_str() {
-                            s == "noise"
-                        } else if let Some(s) = doc["encrypt_mode"].as_str() {
-                            s == "noise"
-                        } else {
-                            false
-                        }
-                    }
-                };
-                result.noise_mode = noise_mode;
-
-                let noise_key = if let Some(s) = doc["noise_key"].as_str() {
-                    Some(s.to_string())
-                } else if let Some(s) = doc["noise_key_path"].as_str() {
-                    Some(s.to_string())
-                } else if let Some(s) = doc["noise_private_key"].as_str() {
-                    Some(s.to_string())
+        // Noise configuration
+        let noise_mode = match doc["noise"].as_bool() {
+            Some(b) => b,
+            None => {
+                if let Some(s) = doc["encrypt"].as_str() {
+                    s == "noise"
+                } else if let Some(s) = doc["encrypt_mode"].as_str() {
+                    s == "noise"
                 } else {
-                    None
-                };
-                result.noise_key_path = noise_key;
-
-                let auth_keys = if let Some(v) = doc["noise_authorized_keys"].as_vec() {
-                    Some(
-                        v.iter()
-                            .filter_map(|x| x.as_str().map(|s| s.to_string()))
-                            .collect(),
-                    )
-                } else if let Some(s) = doc["noise_authorized_keys"].as_str() {
-                    Some(vec![s.to_string()])
-                } else {
-                    None
-                };
-                result.noise_authorized_keys_path = auth_keys;
-
-                // ipv6
-                let p6 = match doc["ipv6"].as_bool() {
-                    Some(b) => b,
-                    None => false,
-                };
-                result.ipv6 = p6;
-
-                // listener part
-                let listener_addr = match doc["listener_addr"].as_str() {
-                    Some(addr) => addr.to_string(),
-                    None => {
-                        if !p6 {
-                            "0.0.0.0".to_string()
-                        } else {
-                            "::".to_string()
-                        }
-                    }
-                };
-                result.listener_addr = listener_addr;
+                    false
+                }
             }
-            Err(e) => return Err(ioError::new(ErrorKind::Other, e)),
-        }
+        };
+        result.noise_mode = noise_mode;
+
+        let noise_key = if let Some(s) = doc["noise_key"].as_str() {
+            Some(s.to_string())
+        } else if let Some(s) = doc["noise_key_path"].as_str() {
+            Some(s.to_string())
+        } else if let Some(s) = doc["noise_private_key"].as_str() {
+            Some(s.to_string())
+        } else {
+            None
+        };
+        result.noise_key_path = noise_key;
+
+        let auth_keys = if let Some(v) = doc["noise_authorized_keys"].as_vec() {
+            Some(
+                v.iter()
+                    .filter_map(|x| x.as_str().map(|s| s.to_string()))
+                    .collect(),
+            )
+        } else if let Some(s) = doc["noise_authorized_keys"].as_str() {
+            Some(vec![s.to_string()])
+        } else {
+            None
+        };
+        result.noise_authorized_keys_path = auth_keys;
+
+        // ipv6
+        let p6 = match doc["ipv6"].as_bool() {
+            Some(b) => b,
+            None => false,
+        };
+        result.ipv6 = p6;
+
+        // listener part
+        let listener_addr = match doc["listener_addr"].as_str() {
+            Some(addr) => addr.to_string(),
+            None => {
+                if !p6 {
+                    "0.0.0.0".to_string()
+                } else {
+                    "::".to_string()
+                }
+            }
+        };
+        result.listener_addr = listener_addr;
+
         Ok(result)
     }
 
+    /// when mode == "half"
+    /// it should return all children details those in loadpaths also
     /// when mode == "half"
     /// it should return all children details those in loadpaths also
     /// in startup field of server config.
     fn half_mode(&self) -> Result<Vec<(String, String)>> {
         let children_set = match &self.startup_list {
             Some(startups) => startups.iter().collect::<HashSet<&String>>(),
-            None => return Err(ioError::new(ErrorKind::NotFound, "startup list not found")),
+            None => bail!("startup list not found"),
         };
 
         let all_children = self.all_ymls_in_load_path()?;
@@ -247,10 +246,7 @@ impl ServerConfig {
             }
         }
 
-        Err(ioError::new(
-            ErrorKind::NotFound,
-            format!("Cannot found '{}' file in load path", filename),
-        ))
+        bail!("Cannot found '{}' file in load path", filename);
     }
 
     /// recursive check if config have dead loop prehook call
@@ -368,36 +364,26 @@ pub fn start_new_child(config: &mut Config) -> Result<Child> {
     }
 
     //run command and give child handle
-    let child = command.spawn();
+    let child = command.spawn().map_err(|e| anyhow!("Cannot start command {:?}: {}", command, e))?;
 
-    match child {
-        Ok(ref c) => {
-            config.child_id = Some(c.id());
-            config.start_time = Some(Local::now());
-            return child;
-        }
-        _ => {
-            return Err(ioError::new(
-                ErrorKind::Other,
-                format!("Cannot start command {:?}", command),
-            ));
-        }
-    };
+    config.child_id = Some(child.id());
+    config.start_time = Some(Local::now());
+    Ok(child)
 }
 
 /// Check if child name is legal or not
-fn child_name_legal_check(s: &str) -> core::result::Result<(), String> {
+fn child_name_legal_check(s: &str) -> Result<()> {
     if s == "all" || s == "on" {
-        return Err(format!(
+        bail!(
             r#""{}" is reserved keywords, cannot run child named "{}""#,
             s, s
-        ));
+        );
     } else if client::Ops::is_op(s) {
         //check if child name is keyword or not.
-        return Err(format!(
+        bail!(
             "this child name {} is one of keyword, cannot be child name",
             s
-        ));
+        );
     }
 
     Ok(())
@@ -453,12 +439,10 @@ pub fn start_new_server_with_args(args: &crate::arg::ServerArgs) -> Result<Kinde
             .as_deref()
             .unwrap_or("/tmp/server.key");
         let server_key = crate::noise::load_key_from_file(key_path).map_err(|e| {
-            ioError::new(
-                ErrorKind::NotFound,
-                format!(
-                    "Failed to load Noise server private key from '{}': {}",
-                    key_path, e
-                ),
+            anyhow!(
+                "Failed to load Noise server private key from '{}': {}",
+                key_path,
+                e
             )
         })?;
         kindergarten.noise_key = Some(server_key);
@@ -515,7 +499,7 @@ pub fn start_new_server_with_args(args: &crate::arg::ServerArgs) -> Result<Kinde
         // ..., however, server un-quiet mode won't through client command check.
         // so we need check again here.
         if let Err(e) = child_name_legal_check(&conf.0) {
-            println!("{}", logger::timelog(&e));
+            println!("{}", logger::timelog(&e.to_string()));
             continue;
         };
 
@@ -588,15 +572,11 @@ pub fn start_deamon(safe_kg: Arc<Mutex<Kindergarten>>, sd: Sender<(String, Strin
                             // hard check if it is suicide operation, because I only care this message so far.
                             // this operation isn't in handle_client because it has make sure return to client..
                             // ..first
-                            let (first, second) = {
-                                let s = e.to_string();
-                                let (f, ss) = s.split_at(12);
-                                (f.to_string(), ss.to_string())
-                            };
-                            if first == "I am dying. " {
-                                println!("{}", logger::timelog(&second));
+                            let s = e.to_string();
+                            if let Some(second) = s.strip_prefix("I am dying. ") {
+                                println!("{}", logger::timelog(second));
                                 //tell main thread,
-                                sd_.send((first.to_string(), second.to_string())).unwrap();
+                                sd_.send(("I am dying. ".to_string(), second.to_string())).unwrap();
                             } else {
                                 //if just normal error
                                 println!("{}", logger::timelog(&e.to_string()));
@@ -624,10 +604,7 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
         let (server_key, auth_clients) = {
             let kg = kig.lock().unwrap();
             let k = kg.noise_key.clone().ok_or_else(|| {
-                ioError::new(
-                    ErrorKind::NotFound,
-                    "Noise server private key is not loaded",
-                )
+                anyhow!("Noise server private key is not loaded")
             })?;
             let ak = kg.noise_authorized_keys.clone().unwrap_or_default();
             (k, ak)
@@ -635,8 +612,7 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
 
         let mut session = crate::noise::server_handshake(stream, &server_key, &auth_clients)?;
         let cmd_bytes = session.recv()?;
-        let received_comm =
-            String::from_utf8(cmd_bytes).map_err(|e| ioError::new(ErrorKind::InvalidInput, e))?;
+        let received_comm = String::from_utf8(cmd_bytes)?;
 
         match day_care(kig, received_comm) {
             Ok(resp) => {
@@ -656,8 +632,7 @@ fn handle_client(mut stream: TcpStream, kig: Arc<Mutex<Kindergarten>>) -> Result
             Some(pos) => &buf[..pos],
             None => &buf[..n],
         };
-        let received_comm = String::from_utf8(payload.to_vec())
-            .map_err(|e| ioError::new(ErrorKind::InvalidInput, e))?;
+        let received_comm = String::from_utf8(payload.to_vec())?;
 
         match day_care(kig, received_comm) {
             Ok(resp) => {
@@ -693,22 +668,17 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         client::Ops::Restart => {
             let name = command.child_name.as_ref().unwrap();
             // check name
-            if let Err(e) = child_name_legal_check(name) {
-                return Err(ioError::new(ErrorKind::InvalidInput, e));
-            }
+            child_name_legal_check(name)?;
 
             let mut conf = server_conf.find_config_by_name(name)?;
 
             // check prehook here
             let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
             if !pre_hook_result.0 {
-                return Err(ioError::new(
-                    ErrorKind::Other,
-                    format!(
-                        "This child, {}, cannot pass pre-check",
-                        command.child_name.unwrap()
-                    ),
-                ));
+                bail!(
+                    "This child, {}, cannot pass pre-check",
+                    command.child_name.unwrap()
+                );
             } else {
                 let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
                 // reverse call chain
@@ -716,99 +686,78 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 kg.handle_pre_hook(pre_hook_combine)?;
             }
 
-            match kg.restart(name, &mut conf) {
-                Ok(_) => {
-                    // repeat here
-                    let repeat_meg = if conf.is_repeat() {
-                        repeat(conf, Arc::clone(&kig), name.clone())
-                    } else {
-                        String::new()
-                    };
+            kg.restart(name, &mut conf)?;
+            // repeat here
+            let repeat_meg = if conf.is_repeat() {
+                repeat(conf, Arc::clone(&kig), name.clone())
+            } else {
+                String::new()
+            };
 
-                    Ok(format!(
-                        "restart {} success{}",
-                        command.child_name.as_ref().unwrap(),
-                        repeat_meg,
-                    ))
-                }
-                Err(e) => Err(e),
-            }
+            Ok(format!(
+                "restart {} success{}",
+                command.child_name.as_ref().unwrap(),
+                repeat_meg,
+            ))
         }
 
         // hot start a new child after its config yaml file put in loadpath
         client::Ops::Start => {
             let name = command.child_name.as_ref().unwrap();
-            if let Err(e) = child_name_legal_check(name) {
-                return Err(ioError::new(ErrorKind::InvalidInput, e));
-            }
+            child_name_legal_check(name)?;
 
             if let Some(_) = kg.has_child(name) {
-                return Err(ioError::new(
-                    ErrorKind::Other,
-                    format!(
-                        "Cannot start this child {}, it already exsits",
-                        command.child_name.unwrap()
-                    ),
-                ));
+                bail!(
+                    "Cannot start this child {}, it already exsits",
+                    command.child_name.unwrap()
+                );
             }
 
             // read this child's config
-            let mut conf = server_conf.find_config_by_name(&name)?;
+            let mut conf = server_conf.find_config_by_name(name)?;
 
             // check prehook here
             let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
             let mut pre_hook_msg = String::new();
             if !pre_hook_result.0 {
-                return Err(ioError::new(
-                    ErrorKind::Other,
-                    format!(
-                        "This child, {}, cannot pass recursive check",
-                        command.child_name.unwrap()
-                    ),
-                ));
+                bail!(
+                    "This child, {}, cannot pass recursive check",
+                    command.child_name.unwrap()
+                );
             } else {
                 let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
                 // reverse call chain
-                if pre_hook_combine.len() != 0 {
+                if !pre_hook_combine.is_empty() {
                     pre_hook_combine.reverse();
                     kg.handle_pre_hook(pre_hook_combine)?;
                     pre_hook_msg.push_str("Find pre-hook, has started pre-hook firstly. ");
                 }
             }
 
-            match kg.start(name, &mut conf) {
-                Ok(_) => {
-                    // repeat here
-                    let repeat_meg = if conf.is_repeat() {
-                        repeat(conf, Arc::clone(&kig), name.clone())
-                    } else {
-                        String::new()
-                    };
+            kg.start(name, &mut conf)?;
+            // repeat here
+            let repeat_meg = if conf.is_repeat() {
+                repeat(conf, Arc::clone(&kig), name.clone())
+            } else {
+                String::new()
+            };
 
-                    Ok(format!(
-                        "{}start {} success{}",
-                        pre_hook_msg,
-                        name.clone(),
-                        repeat_meg
-                    ))
-                }
-                Err(e) => Err(e),
-            }
+            Ok(format!(
+                "{}start {} success{}",
+                pre_hook_msg,
+                name.clone(),
+                repeat_meg
+            ))
         }
 
         client::Ops::Stop => {
             if command.all {
-                match kg.stop_all() {
-                    Ok(_) => return Ok("stop all children success".to_string()),
-                    Err(e) => return Err(e),
-                }
+                kg.stop_all()?;
+                return Ok("stop all children success".to_string());
             }
 
             if command.child_name.is_none() {
-                return Err(ioError::new(
-                    ErrorKind::InvalidInput,
-                    logger::timelog("you have to give which child you want to stop"),
-                ));
+                bail!("{}", logger::timelog("you have to give which child you want to stop"));
             }
 
             let child_name = command.child_name.as_ref().unwrap();
@@ -819,35 +768,31 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                     None
                 };
 
-            match kg.stop(child_name) {
-                Ok(_) => {
-                    if let Some(post_hook_command) = post_hook {
-                        // connect to supervisor itself
-                        let mut stream = TcpStream::connect((
-                            match server_conf.listener_addr.as_str() {
-                                // listen "::" means connect to ::1
-                                "::" => "::1".to_string(),
+            kg.stop(child_name)?;
+            if let Some(post_hook_command) = post_hook {
+                // connect to supervisor itself
+                let mut stream = TcpStream::connect((
+                    match server_conf.listener_addr.as_str() {
+                        // listen "::" means connect to ::1
+                        "::" => "::1".to_string(),
 
-                                // listen "0.0.0.0" means connect to 127.0.0.1
-                                "0.0.0.0" => "127.0.0.1".to_string(),
+                        // listen "0.0.0.0" means connect to 127.0.0.1
+                        "0.0.0.0" => "127.0.0.1".to_string(),
 
-                                // other address
-                                x => x.to_string(),
-                            },
-                            33889,
-                        ))?;
+                        // other address
+                        x => x.to_string(),
+                    },
+                    33889,
+                ))?;
 
-                        stream.write_all(post_hook_command.as_bytes())?;
-                        stream.flush()?;
-                    }
-
-                    return Ok(format!(
-                        "stop {} success",
-                        child_name
-                    ));
-                }
-                Err(e) => Err(e),
+                stream.write_all(post_hook_command.as_bytes())?;
+                stream.flush()?;
             }
+
+            Ok(format!(
+                "stop {} success",
+                child_name
+            ))
         }
 
         // try start will force start child:
@@ -857,9 +802,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             let mut resp = String::new();
 
             let name = command.child_name.as_ref().unwrap();
-            if let Err(e) = child_name_legal_check(name) {
-                return Err(ioError::new(ErrorKind::InvalidInput, e));
-            };
+            child_name_legal_check(name)?;
 
             //check if it is running, stop it or not.
             if let Some(_) = kg.has_child(name) {
@@ -901,10 +844,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                         ));
                     }
                     Err(e) => {
-                        return Err(ioError::new(
-                            ErrorKind::InvalidData,
-                            format!("stop failed, error: {}", &e.to_string()),
-                        ));
+                        bail!("stop failed, error: {}", e);
                     }
                 }
             }
@@ -914,13 +854,10 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             //check prehook here
             let pre_hook_result = server_conf.pre_hook_check(name, &conf)?;
             if !pre_hook_result.0 {
-                return Err(ioError::new(
-                    ErrorKind::Other,
-                    format!(
-                        "This child, {}, cannot pass pre-check",
-                        command.child_name.unwrap()
-                    ),
-                ));
+                bail!(
+                    "This child, {}, cannot pass pre-check",
+                    command.child_name.unwrap()
+                );
             } else {
                 let mut pre_hook_combine = server_conf.call_chain_combine(pre_hook_result.1)?;
                 //reverse call chain
@@ -928,24 +865,20 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
                 kg.handle_pre_hook(pre_hook_combine)?;
             }
 
-            match kg.start(name, &mut conf) {
-                Ok(_) => {
-                    //repeat here
-                    let repeat_meg = if conf.is_repeat() {
-                        repeat(conf, Arc::clone(&kig), name.clone())
-                    } else {
-                        String::new()
-                    };
+            kg.start(name, &mut conf)?;
+            //repeat here
+            let repeat_meg = if conf.is_repeat() {
+                repeat(conf, Arc::clone(&kig), name.clone())
+            } else {
+                String::new()
+            };
 
-                    resp.push_str(&format!(
-                        "Start {} success{} ",
-                        command.child_name.as_ref().unwrap(),
-                        repeat_meg,
-                    ));
-                    Ok(resp)
-                }
-                Err(e) => Err(e),
-            }
+            resp.push_str(&format!(
+                "Start {} success{} ",
+                command.child_name.as_ref().unwrap(),
+                repeat_meg,
+            ));
+            Ok(resp)
         }
 
         // kill supervisor itself
@@ -957,10 +890,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
             }
 
             // step2: return special err outside, let deamon know and stop
-            Err(ioError::new(
-                ErrorKind::Other,
-                format!("I am dying. last error: \n{}", last_will),
-            ))
+            bail!("I am dying. last error: \n{}", last_will);
         }
 
         client::Ops::Check => {
@@ -970,10 +900,7 @@ pub fn day_care(kig: Arc<Mutex<Kindergarten>>, data: String) -> Result<String> {
         client::Ops::Info => server_info(server_conf, &kg, command.child_name.as_ref()),
 
         _ => {
-            return Err(ioError::new(
-                ErrorKind::InvalidInput,
-                logger::timelog("not support"),
-            ));
+            bail!("{}", logger::timelog("not support"));
         }
     }
 }
@@ -1001,6 +928,11 @@ fn server_info(config: ServerConfig, kg: &Kindergarten, name: Option<&String>) -
     let mut resp = String::from("==Server Info Below==\n");
     match name {
         "all" => {
+            // server version
+            resp.push_str("Server version:\n");
+            resp.push_str(env!("CARGO_PKG_VERSION"));
+            resp.push_str("\n");
+
             // server config path
             resp.push_str("Server config path:\n");
             resp.push_str(&kg.server_config_path);
@@ -1023,9 +955,53 @@ fn server_info(config: ServerConfig, kg: &Kindergarten, name: Option<&String>) -
             resp.push_str(&format!("Load paths: {:?}\n", config.load_paths));
             resp.push_str(&format!("Noise mode: {:?}\n", config.noise_mode));
         }
+        "version" | "Version" => {
+            // server version
+            resp.push_str("Server version:\n");
+            resp.push_str(env!("CARGO_PKG_VERSION"));
+            resp.push_str("\n");
+        }
         _ => {}
     }
 
     resp.push_str("=======================\n");
     Ok(resp)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_server_info_includes_version() {
+        let kg = Kindergarten::new();
+        let config = ServerConfig {
+            load_paths: vec!["/tmp".to_string()],
+            mode: "quiet".to_string(),
+            startup_list: None,
+            noise_mode: false,
+            noise_key_path: None,
+            noise_authorized_keys_path: None,
+            listener_addr: "0.0.0.0".to_string(),
+            ipv6: false,
+        };
+
+        let info_all = server_info(config, &kg, None).unwrap();
+        assert!(info_all.contains("Server version:"));
+        assert!(info_all.contains(env!("CARGO_PKG_VERSION")));
+
+        let config_ver = ServerConfig {
+            load_paths: vec!["/tmp".to_string()],
+            mode: "quiet".to_string(),
+            startup_list: None,
+            noise_mode: false,
+            noise_key_path: None,
+            noise_authorized_keys_path: None,
+            listener_addr: "0.0.0.0".to_string(),
+            ipv6: false,
+        };
+        let info_ver = server_info(config_ver, &kg, Some(&"version".to_string())).unwrap();
+        assert!(info_ver.contains("Server version:"));
+        assert!(info_ver.contains(env!("CARGO_PKG_VERSION")));
+    }
 }
