@@ -7,6 +7,8 @@ A lightweight, secure, and asynchronous process supervisor daemon and client wri
 
 `supervisor-rs` manages background services and processes on local and remote servers. It provides process lifecycle management (start, stop, restart, auto-restart intervals, and lifecycle hooks) paired with modern secure networking options, including end-to-end encryption via the Noise Protocol and SSH-agent tunneling.
 
+> For AI agents and automated coding assistants, see [SKILL.md](SKILL.md) for CLI cheatsheets and workflow guidelines.
+
 ---
 
 ## Table of Contents

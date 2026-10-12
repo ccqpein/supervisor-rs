@@ -1,3 +1,6 @@
++ `v0.9.2`
+  - Added `SKILL.md` agent skill guide and cheatsheet for AI coding assistants
+
 + `v0.9.1`
   - Breaking change: `stop all` now stops the child process named `"all"`; added `--all` / `-A` flags to stop all running processes
   - Removed internal magic keyword `"all"` in `Kindergarten::stop`, resolving naming conflicts with managed child processes
