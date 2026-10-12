@@ -6,4 +6,4 @@ GTAGS
 .DS_Store
 deploy.sh
 test/*
-useful_command.*
+useful_command*

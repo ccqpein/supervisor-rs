@@ -1,254 +1,505 @@
-# supervisor-rs #
+# supervisor-rs
 
-`supervisor-rs` used to be a manager of handle application running. `supervisor-rs` can start/restart/stop processing.
+A lightweight, secure, and asynchronous process supervisor daemon and client written in Rust.
 
-- [Usage](#usage)
-  - [Server Side](#server-side)
-  - [Client Side](#client-side)
-  - [Noise Protocol Encryption](#noise-protocol-encryption)
-    - [1. Generating Keys](#1-generating-keys)
+[![Crates.io](https://img.shields.io/crates/v/supervisor-rs.svg)](https://crates.io/crates/supervisor-rs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
+`supervisor-rs` manages background services and processes on local and remote servers. It provides process lifecycle management (start, stop, restart, auto-restart intervals, and lifecycle hooks) paired with modern secure networking options, including end-to-end encryption via the Noise Protocol and SSH-agent tunneling.
+
+---
+
+## Table of Contents
+
+- [Features](#features)
+- [Quick Start](#quick-start)
+  - [Installation](#installation)
+  - [60-Second Setup](#60-second-setup)
+- [Architecture & Core Concepts](#architecture--core-concepts)
+- [Configuration](#configuration)
+  - [Server Configuration (`server.yml`)](#server-configuration-serveryml)
+  - [Child Process Configuration (`<child>.yml`)](#child-process-configuration-childyml)
+  - [Startup Modes (`mode`)](#startup-modes-mode)
+  - [Periodic Execution (Repeat Feature)](#periodic-execution-repeat-feature)
+  - [Lifecycle Hooks](#lifecycle-hooks)
+- [Server Daemon Reference](#server-daemon-reference)
+  - [Server CLI Options](#server-cli-options)
+  - [Command Examples](#server-command-examples)
+  - [Runtime Configuration Reloads](#runtime-configuration-reloads)
+- [Client CLI Reference](#client-cli-reference)
+  - [Client Commands](#client-commands)
+  - [Client Options](#client-options)
+  - [Command Examples & Multi-Host Dispatch](#command-examples--multi-host-dispatch)
+  - [Legacy Syntax Notice](#legacy-syntax-notice)
+- [Networking & Security](#networking--security)
+  - [Custom Listener Address & IPv6 Support](#custom-listener-address--ipv6-support)
+  - [SSH-Agent Tunneling](#ssh-agent-tunneling)
+  - [Noise Protocol Encryption (Noise_XX)](#noise-protocol-encryption-noise_xx)
+    - [1. Generating Keypairs](#1-generating-keypairs)
     - [2. Server Configuration](#2-server-configuration)
     - [3. Client Configuration & Server Verification](#3-client-configuration--server-verification)
     - [4. Authorization Behavior: Encryption-Only vs. Mutual Authentication](#4-authorization-behavior-encryption-only-vs-mutual-authentication)
-  - [Startup-with feature](#startup-with-feature)
-  - [Repeat feature](#repeat-feature)
-    - [How to stop repeat](#how-to-stop-repeat)
-  - [Hooks feature](#hooks-feature)
-  - [Custom Listener address & IPV6 support](#custom-listener-address--ipv6-support)
-  - [SSH-agent tunnel feature](#ssh-agent-tunnel-feature)
-  - [What if accident happens](#what-if-accident-happens)
-- [Cross compiling](#cross-compiling)
-- [Systemd integration](#systemd-integration)
+- [CI/CD & Automation Recipes](#cicd--automation-recipes)
+  - [Idempotent Deployments with `trystart`](#idempotent-deployments-with-trystart)
+  - [Fleet Deployment Script (SSH Tunnels)](#fleet-deployment-script-ssh-tunnels)
+  - [GitHub Actions Workflow Example](#github-actions-workflow-example)
+- [Operations & Production Guide](#operations--production-guide)
+  - [Crash & Failure Behavior](#crash--failure-behavior)
+  - [Log Outlets & Log Rotation (`logrotate`)](#log-outlets--log-rotation-logrotate)
+  - [Security Hardening & Key Permissions](#security-hardening--key-permissions)
+  - [Systemd Service Integration](#systemd-service-integration)
+  - [Cross-Compiling (musl-cross)](#cross-compiling-musl-cross)
 
-**Features**:
+---
 
-+ Start different processing depend on particular yaml file when startup
-+ Start processing when have new config in load path
-+ Startup with particular server config
-+ Restart processing
-+ Stop processing
-+ End-to-end encrypted client/server communication via Noise Protocol (Noise_XX)
+## Features
 
-**Design**:
+- **Configuration-Driven Process Management**: Define processes via simple YAML files located across one or more load paths.
+- **Dynamic Hot-Reloading**: Update child process definitions at runtime without restarting the server daemon.
+- **Flexible Startup Modes**: Choose between `quiet` (manual control), `half` (start designated processes), or `full` (start all discovered processes).
+- **Interval Timers & Periodic Actions**: Automatically re-run or restart child tasks on configured second intervals.
+- **Pre-hook & Post-hook Lifecycle Chaining**: Execute pre-flight and cleanup commands automatically around process lifecycles.
+- **End-to-End Encryption (Noise Protocol)**: Authenticated, encrypted communication (`Noise_XX_25519_ChaChaPoly_BLAKE2s`) with mutual authentication and forward secrecy.
+- **SSH-Agent Tunneling**: Control remote daemons securely over SSH port 22 (`ssh://user@host`) using your existing SSH keys, keeping supervisor ports unexposed to the public internet.
+- **Multi-Host Command Dispatch**: Target multiple local or remote servers simultaneously with a single client command.
 
-1. server/client mode
-2. server start -> load config files from loadpaths (if it is not quiet mode) -> do job
-3. start/stop/restart/tryrestart special processing (client side)
+---
 
-**Config yaml files format**:
+## Quick Start
 
-Example of server.yaml:
+### Installation
+
+Install directly via Cargo:
+
+```bash
+cargo install supervisor-rs
+```
+
+### 60-Second Setup
+
+#### 1. Define a Child Process
+Create a directory for your managed processes and define your first child configuration (e.g. `web.yml`):
+
+```bash
+mkdir -p /tmp/supervisor/apps
+```
+
+Save `/tmp/supervisor/apps/web.yml`:
 
 ```yaml
-# server side config
-loadpaths:
-  - /tmp/client/
-  - /tmp/second/path
-  
-mode: "half"
-startup:
-  - child1
-  - child2
-  
-# Noise encryption (optional)
-noise: true
-noise_key: /tmp/server.key
-noise_authorized_keys:
-  - /tmp/authorized_keys/
+command: python3 -m http.server 8080
+output:
+  - stdout: /tmp/supervisor/web.log
+    mode: append
+  - stderr: /tmp/supervisor/web_error.log
+    mode: append
+```
 
-#ipv6: true
+#### 2. Create the Server Configuration
+Save `/tmp/supervisor/server.yml`:
+
+```yaml
+loadpaths:
+  - /tmp/supervisor/apps
+mode: half
+startup:
+  - web
 listener_addr: 127.0.0.1
 ```
 
-| Fields                 | Usage                                                                                                                                                                  |
-|:----------------------:|:----------------------------------------------------------------------------------------------------------------------------------------------------------------------:|
-| loadpaths              | List of paths of all children config files.                                                                                                                            |
-| mode                   | Startup mode. Values can be "quiet", "half", or "full"                                                                                                                 |
-| startup                | When the `mode` is "half", children in this list will start                                                                                                            |
-| noise                  | Enable Noise protocol encryption. Values can be `true` or `false`                                                                                                      |
-| noise_key              | Path to server's 32-byte Curve25519 private key (hex or raw binary)                                                                                                    |
-| noise_authorized_keys  | Path (or list of paths) to authorized client public keys directory or file                                                                                            |
-| listener_addr          | Address of server side is listening                                                                                                                                    |
-| ipv6                   | Only used when `listener_addr` isn't given. Values can be `true` or `false`. supervisor-rs server side will listen "::" instead of "0.0.0.0" when this field is `true` |
+#### 3. Start the Daemon and Manage via Client
+Start the server daemon:
 
+```bash
+supervisor-rs-server /tmp/supervisor/server.yml
+```
 
-Example of child's config yaml:
+In another terminal, inspect and control your process using the client:
+
+```bash
+# Check status of running processes
+supervisor-rs-client check
+
+# Restart the process
+supervisor-rs-client restart web
+
+# Stop the process
+supervisor-rs-client stop web
+```
+
+---
+
+## Architecture & Core Concepts
+
+- **Daemon (`supervisor-rs-server`)**: Runs persistently in the background. It scans configured `loadpaths` for child YAML files and manages active processes inside an internal process table (the *Kindergarten*).
+- **Controller (`supervisor-rs-client`)**: Sends control commands (`start`, `restart`, `stop`, `check`, etc.) over TCP or SSH tunnels to one or more server daemons.
+- **Child Identification**: Each child process is uniquely identified by the **filename** (without `.yml`) of its configuration file. Process names across all configured `loadpaths` must be unique.
+- **Working Directory**: Each child process runs with its working directory set to the folder where its configuration YAML file resides.
+
+---
+
+## Configuration
+
+### Server Configuration (`server.yml`)
+
+The server configuration file governs the daemon's runtime behavior, discovery paths, and networking.
 
 ```yaml
-#each child config in loadpath of server config
-command: /tmp/test
-output:
-  - stdout: aaaaaa
-    mode: create
+# server.yml
+loadpaths:
+  - /tmp/supervisor/apps
+  - /etc/supervisor/services
 
-  - stderr: nnnnn
+mode: "half"
+startup:
+  - web
+  - worker
+
+# Networking
+listener_addr: 127.0.0.1
+# ipv6: false
+
+# Noise protocol encryption (optional)
+noise: true
+noise_key: /etc/supervisor/server.key
+noise_authorized_keys:
+  - /etc/supervisor/authorized_clients/
+```
+
+| Field | Type | Description |
+| :--- | :--- | :--- |
+| `loadpaths` | List of strings | Directories scanned by the server for child YAML configuration files. |
+| `mode` | String | Startup mode: `"quiet"`, `"half"`, or `"full"`. Default is `"quiet"`. |
+| `startup` | List of strings | When `mode` is `"half"`, children in this list are automatically started on boot. |
+| `listener_addr` | String | IP address for the server to bind to (e.g. `127.0.0.1` or `0.0.0.0`). Default is `0.0.0.0`. |
+| `ipv6` | Boolean | When `listener_addr` is omitted, binds to `::` instead of `0.0.0.0` if `true`. |
+| `noise` | Boolean | Enable Noise Protocol encryption (`true` or `false`). |
+| `noise_key` | String | Path to server's 32-byte Curve25519 private key (hex or raw binary). |
+| `noise_authorized_keys` | String / List | Path to authorized client public keys file or directory. |
+
+---
+
+### Child Process Configuration (`<child>.yml`)
+
+Each supervised process is configured in its own YAML file located in one of the server's `loadpaths`.
+
+```yaml
+# Example: /tmp/supervisor/apps/demo.yml (Child name is "demo")
+command: /usr/local/bin/my-service --port 8080
+
+output:
+  - stdout: /var/log/demo.stdout.log
     mode: append
+  - stderr: /var/log/demo.stderr.log
+    mode: create
 
 repeat:
   action: restart
-  seconds: 5
+  seconds: 60
 
 hooks:
-  - prehook: start child
-  - posthook: start child
+  - prehook: echo "Starting demo service..."
+  - posthook: echo "Demo service stopped."
 ```
 
-## Usage ##
+| Field | Description |
+| :--- | :--- |
+| `command` | The executable path and arguments to run. |
+| `output` | List of output streams (`stdout` / `stderr`) with target file path and mode (`create` or `append`). If omitted, streams inherit the server daemon's standard I/O. |
+| `repeat` | Optional periodic execution settings (`action` and interval in `seconds`). |
+| `hooks` | Lifecycle hooks: `prehook` (runs before start/restart) and `posthook` (runs after stop). |
 
-You can download compiled binary file directly.
+---
 
-You can install from cargo.io, run `cargo install supervisor-rs`.
+### Startup Modes (`mode`)
 
-### Server Side ###
+The server daemon supports three startup behaviors:
 
-Run `supervisor-rs-server [CONFIG]` or `supervisor-rs-server -c <CONFIG_PATH>` in shell. You can specify a server config YAML file path. If no config path is given, `supervisor-rs` defaults to finding `/tmp/server.yml`.
+- **`quiet` (Default)**: The daemon registers all `loadpaths` but does **not** automatically start any child processes. Processes must be started explicitly via the client.
+- **`half`**: The daemon automatically starts only the processes explicitly listed in the `startup` array. If an entry in `startup` is missing from `loadpaths`, it is safely skipped.
+- **`full`**: The daemon starts **every** valid child configuration found across all `loadpaths`. Every YAML file in `loadpaths` must be a valid child configuration.
 
-**CLI options:**
+---
 
-- `[CONFIG]`: Optional positional configuration file path (default: `/tmp/server.yml`)
-- `-c, --config <CONFIG_PATH>`: Specify configuration file path via flag
-- `-n, --noise`: Enable Noise protocol encryption via CLI
-- `--noise-key <KEY_PATH>`: Path to server Noise private key
-- `--noise-authorized-keys <KEYS_PATH>`: Path to authorized client public keys directory or file
-- `--keygen`: Generate a new Noise Curve25519 keypair and exit
-- `-h, --help`: Print help information
-- `-V, --version`: Print version information
+### Periodic Execution (Repeat Feature)
 
-**Command demo:**
+If a child configuration includes a `repeat` block, `supervisor-rs` initializes a timer after starting the child:
+
+```yaml
+repeat:
+  action: restart
+  seconds: 30
+```
+
+- **`action`**: Client command to execute when the timer fires (`restart`, `start`, or `trystart`). Defaults to `restart` if omitted.
+- **`seconds`**: Interval duration in seconds (must be greater than 0).
+- **PID Verification**: When the timer triggers, it verifies that the child's process ID matches the ID recorded when the timer was scheduled. If the process was replaced or stopped out-of-band, outdated timer actions are safely aborted.
+- **Stopping Repeat**: To discontinue scheduled timers, remove or comment out the `repeat` block in the child YAML. Because configurations are reloaded before each execution, the subsequent cycle will not schedule a new timer.
+
+---
+
+### Lifecycle Hooks
+
+Children can declare lifecycle hooks:
+
+```yaml
+command: /usr/local/bin/worker
+hooks:
+  - prehook: /usr/local/bin/setup-worker-env
+  - posthook: /usr/local/bin/cleanup-worker-data
+```
+
+- **`prehook`**: Runs immediately before the child process starts or restarts. If prehooks form a chain, they execute sequentially. Recursive dependency cycles are rejected.
+- **`posthook`**: Runs immediately after the child process terminates or is stopped.
+
+---
+
+## Server Daemon Reference
+
+### Server CLI Options
+
+Run `supervisor-rs-server [CONFIG]` or `supervisor-rs-server -c <CONFIG_PATH>`. If no configuration path is provided, the server defaults to `/tmp/server.yml`.
+
+```
+Usage: supervisor-rs-server [OPTIONS] [CONFIG]
+
+Arguments:
+  [CONFIG]  Optional positional configuration file path [default: /tmp/server.yml]
+
+Options:
+  -c, --config <CONFIG_PATH>              Specify configuration file path via flag
+  -n, --noise                             Enable Noise protocol encryption via CLI
+      --noise-key <KEY_PATH>              Path to server Noise private key
+      --noise-authorized-keys <KEYS_PATH> Path to authorized client public keys directory or file
+      --keygen                            Generate a new Noise Curve25519 keypair and exit
+  -h, --help                              Print help information
+  -V, --version                           Print version information
+```
+
+### Server Command Examples
 
 ```bash
 # Run server with default config (/tmp/server.yml)
 supervisor-rs-server
 
-# Run server with positional config path
-supervisor-rs-server ./test/server.yml
+# Run server with a positional configuration path
+supervisor-rs-server /etc/supervisor/server.yml
 
-# Run server with --config flag
-supervisor-rs-server -c ./test/server.yml
-supervisor-rs-server --config ./test/server.yml
+# Run server using the --config flag
+supervisor-rs-server -c /etc/supervisor/server.yml
 
 # Run server with Noise encryption enabled via CLI
-supervisor-rs-server -c ./test/server.yml --noise --noise-key /tmp/server.key --noise-authorized-keys /tmp/authorized_keys/
+supervisor-rs-server -c /etc/supervisor/server.yml \
+  --noise \
+  --noise-key /etc/supervisor/server.key \
+  --noise-authorized-keys /etc/supervisor/authorized_clients/
 
-# Generate a new Noise keypair
+# Generate a new Noise Curve25519 keypair
 supervisor-rs-server --keygen
 ```
 
-After server application start, if `mode` is **full**, then all **application yaml files under loadpath of server config** will be ran by application. So, that means every yaml files in there should be legal application config file, or server cannot start.
+### Runtime Configuration Reloads
 
-Server side's default mode is `quiet`, means server will record `loadpaths`, but won't start children automatically.
+The server daemon holds a reference to its configuration file path and dynamically reloads configuration contents upon receiving child commands:
+- **Load Paths**: You can add new directories to `loadpaths` in `server.yml` while the server is running. When you instruct the server to start a child located in a new path, the server re-reads `server.yml` and discovers the new child.
+- **Child Definitions**: Modifying a `<child>.yml` file takes effect on the next `start`, `restart`, or `trystart` invocation.
 
-Each sub-processing is named with **filename** of yaml file. If have multi-loadpath, make sure **no yaml files have same name**. 
+---
 
-**Change server's config while runtime**
+## Client CLI Reference
 
-After server start, config path is strict but the content of config is negotiable. It means you can change what config is, but you cannot change where is it. 
-
-For example, you just want to add a new `loadpaths` to server. You can easily change `loadpaths` in server's config. However, server does not make it change immediately because no necessary. 
-
-Then you put a child config inside the `loadpath` you just add, then let it start ([Go to Client Side for usage](#client-side)). Server will re-read configuration and start it. Every children run in the same path (current path of children processing) that the config located in.
-
-Technically, server only keep configuration path, and read it again when server need to operate children.
-
-### Client Side ###
-
-`supervisor-rs-client` is used to send commands to the server side daemon.
-
-**Usage:**
+`supervisor-rs-client` dispatches management commands to local or remote `supervisor-rs-server` daemons.
 
 ```bash
 supervisor-rs-client <COMMAND> [OPTIONS]
 ```
 
-**Options:**
+### Client Commands
 
-- `-o, --on <HOST>`: Remote host address(es) to send command to (e.g. `127.0.0.1`, `192.168.1.1`, or `ssh://user@host`). Can be specified multiple times or comma-separated.
-- `-n, --noise`: Enable Noise protocol encryption
-- `-k, --noise-key <KEY_PATH>`: Path to client Noise private key (default: `~/.supervisor/client.key` or `./client.key`)
-- `--noise-authorized-keys <KEYS_PATH>`: Path to authorized server public keys directory or file (default: `./authorized_keys`)
-- `-h, --help`: Print help information (supports both global help and subcommand help, e.g. `supervisor-rs-client start --help`)
-- `-V, --version`: Print version information
+| Command | Arguments | Behavior |
+| :--- | :--- | :--- |
+| `check` | `[CHILD]` *(optional)* | Returns status and summary of running processes. If a child process is no longer alive, it is automatically purged from the table. |
+| `start` | `<CHILD>` | Starts a new child process. If the child process panics or exits immediately, the start command reports initiation success; use `check` to verify live status. |
+| `restart` | `<CHILD>` | Restarts an already running child process. Fails if the child is not currently active (use `start` or `trystart` instead). |
+| `trystart` | `<CHILD>` | **Idempotent CI/CD command**: If the child is already running, it restarts it; if it is not running, it starts it. |
+| `stop` | `<CHILD>` \| `-A, --all` | Stops a running child process by name (e.g. `stop all` stops the child named "all"), or supply `--all` / `-A` to terminate all managed processes. |
+| `info` | `[CHILD]` *(optional)* | Retrieves runtime information, load paths, and configuration state from the server. |
+| `kill` | `[CHILD]` *(optional)* | Terminates the server daemon itself and returns its final status response. |
+| `keygen` | `[OUT]` *(optional)* | Generates a new Noise Curve25519 keypair. If an output prefix is supplied, creates `<out>.key` and `<out>.pub`. |
 
-> [!NOTE]
-> **Legacy Syntax Notice:**
-> The `on <HOST>` preposition syntax is legacy (0.x) syntax supported for backwards compatibility:
-> - `supervisor-rs-client restart child0 on 127.0.0.1` *(legacy)*
-> - `supervisor-rs-client restart child0 on 192.168.1.1 on 192.168.1.2` *(legacy)*
-> - `supervisor-rs-client restart child0 on "192.168.1.1, 192.168.1.2"` *(legacy)*
+> [!WARNING]
+> **Breaking Change (`stop` behavior):**
+> Previously, `supervisor-rs-client stop all` was a magic reserved command that stopped all running processes.
+> `all` is no longer a magic keyword. Running `supervisor-rs-client stop all` now attempts to stop the child process whose config is named `"all"`.
+> To terminate all running child processes, you must use `supervisor-rs-client stop --all` (or `supervisor-rs-client stop -A`).
 
-**Commands:**
+### Client Options
 
-| command  | arguments       | behavior                                                                                                                                                                                                                                                                                   |
-| ---      | ---             | ---                                                                                                                                                                                                                                                                                        |
-| restart  | `<CHILD>`       | restart child on server. this child has to be running (server application). Otherwise, use start instead                                                                                                                                                                                   |
-| start    | `<CHILD>`       | start new child. This command can start one-time command, or new config just put in loadpath(s). And, start does not care what's happen in child itself. If it start and panic immediately, supervisor will return success message anyway. Use `check` command to check if it runs or not. |
-| stop     | `<CHILD>`       | stop running child. Have to supply child name. If want to stop all children, use `stop all`                                                                                                                                                                                                |
-| check    | `[CHILD]` (opt) | return summary of all children who are **running**. If children are not running, no matter what reason, they will be cleaned from kindergarden's table.                                                                                                                                    |
-| trystart | `<CHILD>`       | special command for CI/CD to start child processings. `restart` only works when child is running; `start` only works when child is not running. `trystart` will run child processing anyway, if it is running, restart; if it is not running, start it.                                    |
-| kill     | `[CHILD]` (opt) | kill will terminate server and return last words from server                                                                                                                                                                                                                               |
-| info     | `[CHILD]` (opt) | get general information of server self                                                                                                                                                                                                                                                     |
-| keygen   | `[OUT]` (opt)   | generate a new Noise Curve25519 keypair, optionally saving `<out>.key` and `<out>.pub`                                                                                                                                                                                                     |
+| Option | Description |
+| :--- | :--- |
+| `-o, --on <HOST>` | Target host address(es) (e.g. `127.0.0.1`, `192.168.1.1`, or `ssh://user@host`). Can be repeated or comma-separated. |
+| `-n, --noise` | Enable end-to-end Noise Protocol encryption. |
+| `-k, --noise-key <KEY_PATH>` | Path to client Noise private key (default: `~/.supervisor/client.key` or `./client.key`). |
+| `--noise-authorized-keys <KEYS_PATH>` | Path to authorized server public keys directory or file (default: `./authorized_keys`). |
+| `-h, --help` | Print help information (supports subcommand help: `supervisor-rs-client start --help`). |
+| `-V, --version` | Print version information. |
 
-**Examples:**
+### Command Examples & Multi-Host Dispatch
 
 ```bash
-# Restart child0 locally
-supervisor-rs-client restart child0
-
-# Restart child0 on a remote host
-supervisor-rs-client restart child0 -o 192.168.1.1
-# [Legacy] preposition syntax:
-supervisor-rs-client restart child0 on 192.168.1.1
-
-# Send to multiple hosts
-supervisor-rs-client restart child0 -o 192.168.1.1 -o 192.168.1.2
-supervisor-rs-client restart child0 --on "192.168.1.1, 192.168.1.2"
-# [Legacy] preposition syntax:
-supervisor-rs-client restart child0 on 192.168.1.1 on 192.168.1.2
-
-# Check status of running children
+# Check status of local processes
 supervisor-rs-client check
-supervisor-rs-client check -o 192.168.1.1
-# [Legacy] preposition syntax:
-supervisor-rs-client check on 192.168.1.1
 
-# Stop all children
-supervisor-rs-client stop all
+# Start or restart a child locally
+supervisor-rs-client start web
+supervisor-rs-client restart web
 
-# Generate a new Noise keypair for the client
-supervisor-rs-client keygen
-# Or write to files (creates client.key and client.pub):
+# CI/CD deployment: start if stopped, restart if running
+supervisor-rs-client trystart web
+
+# Stop a single process
+supervisor-rs-client stop web
+
+# Stop all processes
+supervisor-rs-client stop --all
+supervisor-rs-client stop -A
+
+# NOTE (Breaking Change):
+# supervisor-rs-client stop all
+# The command above now stops the child process named "all"!
+# It no longer stops all children. To terminate all processes, use --all or -A instead.
+
+# Query status on a remote host over direct TCP
+supervisor-rs-client check -o 192.168.1.10
+
+# Dispatch command to multiple remote hosts simultaneously
+supervisor-rs-client restart web -o 192.168.1.10 -o 192.168.1.11
+supervisor-rs-client restart web --on "192.168.1.10, 192.168.1.11"
+
+# Generate a Noise keypair for the client
 supervisor-rs-client keygen ~/.supervisor/client
 
-# Send encrypted command with Noise protocol
-supervisor-rs-client restart child0 -o 192.168.1.1 --noise -k ~/.supervisor/client.key --noise-authorized-keys ~/.supervisor/authorized_keys/
+# Send encrypted commands using Noise Protocol
+supervisor-rs-client restart web \
+  -o 192.168.1.10 \
+  --noise \
+  -k ~/.supervisor/client.key \
+  --noise-authorized-keys ~/.supervisor/authorized_keys/
 ```
 
-### Noise Protocol Encryption ###
+### Legacy Syntax Notice
 
-`supervisor-rs` supports end-to-end encrypted client/server communication using the **Noise Protocol Framework** (`Noise_XX_25519_ChaChaPoly_BLAKE2s`).
+> [!NOTE]
+> The preposition syntax `on <HOST>` is supported for backwards compatibility with 0.x releases:
+> ```bash
+> supervisor-rs-client restart web on 127.0.0.1
+> supervisor-rs-client restart web on 192.168.1.10 on 192.168.1.11
+> supervisor-rs-client restart web on "192.168.1.10, 192.168.1.11"
+> ```
 
-**Security Benefits:**
-- **Mutual Authentication**: Both the client and the server authenticate each other's 32-byte Curve25519 static public keys.
-- **Identity Hiding**: Both client and server static public keys are transmitted encrypted across the wire.
-- **Forward Secrecy**: Fresh ephemeral Diffie-Hellman keys are negotiated for every connection, ensuring past sessions cannot be decrypted if keys are later compromised.
-- **Tamper-proof Framing**: Every message is protected with ChaCha20-Poly1305 AEAD authenticated encryption.
+---
 
-#### 1. Generating Keys ####
+## Networking & Security
 
-You can generate 32-byte Curve25519 keypairs directly via the client or server CLI:
+`supervisor-rs` supports three tiers of network transport:
+1. **Direct TCP (IPv4 / IPv6)**: Fast, lightweight local or private-network access.
+2. **SSH-Agent Tunneling**: Zero-configuration firewall traversal over SSH port 22 using existing SSH keys.
+3. **Noise Protocol Encryption**: Cryptographically authenticated, forward-secret, end-to-end encrypted transport.
+
+---
+
+### Custom Listener Address & IPv6 Support
+
+By default, `supervisor-rs-server` listens on `0.0.0.0:33889`. You can bind to a specific interface or enable IPv6 in `server.yml`:
+
+```yaml
+# Bind only to localhost (recommended when using SSH tunnels)
+listener_addr: "127.0.0.1"
+
+# Or bind to a specific IPv6 address
+# listener_addr: "::1"
+
+# Or bind to all IPv6 interfaces (only active when listener_addr is omitted)
+# ipv6: true
+```
+
+When `listener_addr` is omitted and `ipv6: true` is configured, the server binds to `:::33889`.
+
+---
+
+### SSH-Agent Tunneling
+
+When managing instances across public clouds or untrusted networks, exposing port `33889` directly is often undesired. The **SSH-agent tunnel feature** allows `supervisor-rs-client` to route commands through an SSH direct-tcpip channel (port 22) using your active SSH agent:
+
+```
+[supervisor-rs-client] ──(SSH Port 22 Tunnel)──> [sshd on Remote] ──(127.0.0.1:33889)──> [supervisor-rs-server]
+```
+
+#### Key Advantages
+- **Zero Firewall Overhead**: No need to open port `33889` on security groups or firewalls; only standard SSH (port 22) is required.
+- **No Client Binary on Server**: Only `supervisor-rs-server` must run on the remote host; `supervisor-rs-client` runs locally.
+- **Layered Security**: Can be combined with the Noise Protocol for end-to-end authenticated encryption *inside* the SSH tunnel.
+
+#### Setup
+
+1. **Server Machine**:
+   - Bind daemon locally in `server.yml`:
+     ```yaml
+     listener_addr: "127.0.0.1"
+     ```
+   - Start `supervisor-rs-server`.
+
+2. **Client Machine**:
+   - Ensure you can connect to the remote host with SSH key authentication.
+   - Load your private key into your local SSH agent:
+     ```bash
+     ssh-add ~/.ssh/id_ed25519
+     ```
+
+#### Tunnel Usage
+
+Target remote hosts using the `ssh://username@ipaddress` format:
 
 ```bash
-# Generate keys and print hex to stdout
+# Check status over plain SSH tunnel
+supervisor-rs-client check -o ssh://ubuntu@192.168.3.3
+
+# Restart a process over SSH tunnel
+supervisor-rs-client restart web -o ssh://ubuntu@192.168.3.3
+
+# Combine SSH tunnel with Noise end-to-end encryption
+supervisor-rs-client restart web \
+  -o ssh://ubuntu@192.168.3.3 \
+  --noise \
+  -k ~/.supervisor/client.key
+```
+
+---
+
+### Noise Protocol Encryption (Noise_XX)
+
+`supervisor-rs` provides end-to-end authenticated encryption using the **Noise Protocol Framework** (`Noise_XX_25519_ChaChaPoly_BLAKE2s`).
+
+- **Mutual Authentication**: Both client and server authenticate each other using 32-byte Curve25519 static public keys.
+- **Identity Hiding**: Public keys are never transmitted in cleartext; they are encrypted during the handshake.
+- **Forward Secrecy**: Ephemeral Diffie-Hellman keys are generated per session, preventing future decryption of recorded traffic if static keys are compromised.
+- **AEAD Tamper Protection**: All payload frames are authenticated and encrypted using ChaCha20-Poly1305.
+
+#### 1. Generating Keypairs
+
+Keypairs can be generated using either the client or server CLI:
+
+```bash
+# Generate keys and output hex to stdout
 supervisor-rs-client keygen
 # or
 supervisor-rs-server --keygen
 
-# Generate keys and save directly to files (<prefix>.key and <prefix>.pub)
+# Generate and save keys directly to files (<prefix>.key and <prefix>.pub)
 supervisor-rs-client keygen ~/.supervisor/client
 # Creates:
-#   ~/.supervisor/client.key  (Private key, hex format - keep this secret on client)
-#   ~/.supervisor/client.pub  (Public key, hex format - copy this to server's authorized_clients/)
+#   ~/.supervisor/client.key  (Private key, hex format - keep secure on client)
+#   ~/.supervisor/client.pub  (Public key, hex format - copy to server)
 
 supervisor-rs-client keygen /etc/supervisor/server
 # Creates:
@@ -256,303 +507,307 @@ supervisor-rs-client keygen /etc/supervisor/server
 #   /etc/supervisor/server.pub  (Server public key)
 ```
 
-**Extract public key from an existing private key:**
-If you only have `client.key` and need its public key:
+**Derive public key from an existing private key:**
 ```bash
 # Print public key hex to stdout:
 supervisor-rs-client keygen --pubkey-from ~/.supervisor/client.key
 
-# Or derive and save directly to client.pub:
+# Derive and write to client.pub:
 supervisor-rs-client keygen ~/.supervisor/client --pubkey-from ~/.supervisor/client.key
 ```
 
-#### 2. Server Configuration ####
+#### 2. Server Configuration
 
-To authorize a client on the server, place the client's public key (`client.pub`) into the server's `authorized_clients/` directory:
+To authorize clients on the server, place client public keys (`.pub` files) into an authorized directory:
 
 ```bash
-# On the server machine:
 mkdir -p /etc/supervisor/authorized_clients/
-cp /path/to/client.pub /etc/supervisor/authorized_clients/client_laptop.pub
+cp client_laptop.pub /etc/supervisor/authorized_clients/
 ```
 
-Enable Noise encryption in `server.yml`:
+Enable Noise in `server.yml`:
 
 ```yaml
-# server.yml
-loadpaths:
-  - /tmp/client/
-
 noise: true
 noise_key: /etc/supervisor/server.key
 noise_authorized_keys:
   - /etc/supervisor/authorized_clients/   # Directory of authorized client .pub files
 ```
 
-Alternatively, enable and configure via server CLI flags:
+Or configure via server flags:
 
 ```bash
-supervisor-rs-server -c /tmp/server.yml --noise --noise-key /etc/supervisor/server.key --noise-authorized-keys /etc/supervisor/authorized_clients/
+supervisor-rs-server -c /etc/supervisor/server.yml \
+  --noise \
+  --noise-key /etc/supervisor/server.key \
+  --noise-authorized-keys /etc/supervisor/authorized_clients/
 ```
 
-The server reads authorized client public keys from:
-- A directory containing `.pub` files (each containing a 64-character hex key).
-- A single file containing hex keys (one per line, `#` comments supported).
+The server accepts authorized public keys from:
+- A directory of `.pub` files (each containing a 64-character hex key).
+- A single text file with hex keys listed one per line (`#` comments supported).
 
-If a client attempts to connect with an unrecognized public key, the server rejects the handshake with `PermissionDenied`.
+If a connecting client is unrecognized, the server terminates the handshake with `PermissionDenied`.
 
-#### 3. Client Configuration & Server Verification ####
+#### 3. Client Configuration & Server Verification
 
-**Does the client side also need an `authorized_keys/` folder?**
-
-**Yes, for full verification!** In mutual authentication (`Noise_XX`), the server sends its static public key to the client during the handshake. To protect against Man-in-the-Middle (MITM) attacks and rogue servers, the client verifies the server's public key against an authorized server keys directory or file.
-
-If the server's public key is not in the client's `authorized_keys`, the client terminates the connection immediately.
-
-**Sending commands with Noise:**
+In mutual authentication (`Noise_XX`), the server sends its static public key to the client during the handshake. The client verifies this against its authorized server keys list to prevent Man-in-the-Middle (MITM) attacks:
 
 ```bash
-# Put server public key into client's authorized_keys folder
+# Place server's public key in client's authorized_keys directory
 mkdir -p ~/.supervisor/authorized_keys
-cp /path/to/server.pub ~/.supervisor/authorized_keys/
+cp server.pub ~/.supervisor/authorized_keys/
 
-# Send encrypted command with full mutual verification
-supervisor-rs-client restart child0 \
-  -o 192.168.1.1 \
+# Connect with full mutual verification
+supervisor-rs-client restart web \
+  -o 192.168.1.10 \
   --noise \
   -k ~/.supervisor/client.key \
   --noise-authorized-keys ~/.supervisor/authorized_keys/
-
-# Send encrypted command without server whitelisting (encryption-only)
-supervisor-rs-client restart child0 \
-  -o 192.168.1.1 \
-  --noise \
-  -k ~/.supervisor/client.key
 ```
 
-#### 4. Authorization Behavior: Encryption-Only vs. Mutual Authentication ####
+#### 4. Authorization Behavior: Encryption-Only vs. Mutual Authentication
 
 > [!IMPORTANT]
-> **What happens if `authorized_keys` is omitted or empty?**
+> **Authorized Keys Verification Matrix**
 >
-> | Side | When `authorized_keys` is EMPTY | When `authorized_keys` is CONFIGURED |
+> | Side | When `authorized_keys` is EMPTY / OMITTED | When `authorized_keys` is CONFIGURED |
 > | :--- | :--- | :--- |
-> | **Client** | **Accepts ANY server** (traffic is fully encrypted, but server identity is not verified). | **Rejects** any server whose public key is not in the list (`PermissionDenied`). |
-> | **Server** | **Accepts ANY client** (traffic is fully encrypted, but any client with a valid Noise key can connect). | **Rejects** any client whose public key is not in the list (`PermissionDenied`). |
+> | **Client** | **Accepts ANY server** (Traffic is encrypted with forward secrecy, but server identity is unverified). | **Rejects** any server whose public key is not in the authorized list (`PermissionDenied`). |
+> | **Server** | **Accepts ANY client** (Traffic is encrypted with forward secrecy, but any client with a valid Noise key can connect). | **Rejects** any client whose public key is not in the authorized list (`PermissionDenied`). |
 >
-> - **Encryption-Only Mode**: Simply supply private keys (`-k` on client, `noise_key` on server) without specifying authorized keys. All communications are protected with ChaCha20-Poly1305 and Forward Secrecy, but no public key whitelisting is enforced.
-> - **Mutual Authentication Mode**: Add public keys to `authorized_keys` on both sides. Both client and server verify each other's identities and reject any untrusted peers.
+> - **Encryption-Only Mode**: Provide private keys (`-k` on client, `noise_key` on server) without specifying authorized keys. All communications are encrypted with ChaCha20-Poly1305 and forward secrecy without whitelisting.
+> - **Mutual Authentication Mode**: Supply `authorized_keys` on both sides. Both client and server strictly verify each other's identities before processing commands.
 
-### Startup-with feature ###
+---
 
-If server's config `mode` is `half`, server will try to startup all children in `startup` list when it starts.
+## CI/CD & Automation Recipes
 
-Demo:
+### Idempotent Deployments with `trystart`
 
-```yaml
-#server side config
-loadpaths:
-  - /tmp/client/
-  - /tmp/second/path
-  
-mode: "half"
-startup:
-  - child1
-  - child2
-  - child3
-```
+In automated deployment pipelines (CI/CD, Ansible, or custom deployment scripts), scripts typically do not know whether a service is currently running, stopped, or being provisioned for the first time:
+- **`start`** fails if the process is already running.
+- **`restart`** fails if the process is not yet running (e.g. initial server provisioning, or if the process exited unexpectedly).
+- **`trystart` is completely idempotent**:
+  - If the process is currently **running**, `supervisor-rs` reloads its configuration and **restarts** it.
+  - If the process is **not running**, `supervisor-rs` **starts** it.
 
-server will try to start `child1`, `child2`, and `child3` when it startup
-
-**QA:**
-
-Q: if child3 not exist?
-
-A: server will going to find children in `startup`, if some of them not exist in loadpaths, server will skip them.
-
-Q: what if I forget write mode to half?
-
-A: server default mode is quiet, and startup list only used in `half` mode, otherwise, `startup` won't effect anything.
-
-
-### Repeat feature ###
-
-if config of child has `repeat` field:
-
-```yaml
-#file name (child name) is demo.yml
-command: /tmp/test
-output:
-  - stdout: aaaaaa
-    mode: create
-
-  - stderr: nnnnn
-    mode: append
-repeat:
-  action: restart
-  seconds: 5 #only support seconds now
-  
-```
-
-then, when you start it, `supervisor-rs` will give a timer stand by and send back command when time is up. For example, config above will run `restart demo` every 5 seconds. 
-
-`action`'s values are command we using in supervisor-rs-client, so you even can `stop` child with `repeat` field. But so, `supervisor-rs` won't create a timer stand by. 
-
-Only `start`, `restart`, and `trystart` will let `supervisor-rs` create a timer, if `repeat` field exists.
-
-If `action` is empty, `supervisor-rs` will give `restart` be default value. However, `seconds` has to have value, and it cannot be 0.
-
-
-#### How to stop repeat ####
-
-As I said above, `timer` be created right after child runs. So you cannot stop "next" action, but if you change child's config, like delete repeat field, then "next" action won't create a timer. 
-
-This is because all `start`, `restart` and `trystart` will **reload** config of child before it does its job.
-
-So, what will supervisor do if child has `stopped`, or `restart` manually before timer finish its waiting and send command to supervisor again, timer isn't outdated? Timer will check if child has same processing id as when it created timer. If this check passed, timer will do its job as normal, else, timer won't do anything because child current is not child before.
-
-### Hooks feature ###
-
-Each child can have two hooks, one `prehook`, one `posthook`. `prehook` command will run before main child `start`/`restart`. `posthook` will run after child `stop`.
-
-If prehooks command child has anther prehook, means there is a prehooks chain, they will run one by one, and they cannot have hooks circle.
-
-example:
-
-```yaml
-command: sleep 10
-hooks:
-  - prehook: start child
-  - posthook: start child
-```
-
-### Custom Listener address & IPV6 support ###
-
-If you want to use specifically listener IP address instead of `0.0.0.0` (default listener address), you can easily put `listener_addr` field in your server side config yaml file. 
-
-Example:
-
-```yaml
-#server side config
-loadpaths:
-  - /tmp/client/
-  - /tmp/second/path
-
-listener_addr: "127.0.0.1" # only listen local
-```
-
-If you want use IPV6 instead of IPV4, you can just change `listener_addr` to IPV6 address you want. Or just turn `ipv6` field to `true`.
-
-Example:
-
-```yaml
-#server side config
-loadpaths:
-  - /tmp/client/
-  - /tmp/second/path
-
-listener_addr: "::1" # only listen local ipv6
-```
-
-`ipv6` field only used when there is **no** `listener_addr` given, or `supervisor-rs` server side will ignore `ipv6`. If there is no `listener_addr` given, and `ipv6` is true, `supervisor-rs` will start with listen ipv6 address `::`.
-
-### SSH-Agent Tunnel Feature ###
-
-By default, `supervisor-rs-server` listens on `0.0.0.0:33889`. While the [Noise Protocol Encryption](#noise-protocol-encryption) provides end-to-end encryption and mutual authentication for direct TCP connections, you may not want to expose port `33889` to the public internet at all when deploying to cloud environments.
-
-The **SSH-agent tunnel feature** allows the client to connect to the remote host securely over SSH (port 22) using your existing SSH keys, and execute supervisor commands locally on the remote machine.
-
-#### How It Works
-
-Instead of exposing port `33889` to the internet or executing remote shell commands, `supervisor-rs-client`:
-1. Connects to port 22 of the remote machine via SSH.
-2. Authenticates using your local SSH-agent.
-3. Opens a direct-tcpip channel directly to `127.0.0.1:33889` on the remote server.
-4. Communicates directly with the supervisor daemon through the encrypted tunnel:
-   - If `--noise` is enabled, the client performs the Noise handshake and end-to-end encryption through the SSH tunnel using your local Noise keys!
-   - If `--noise` is omitted, commands are sent directly through the encrypted SSH tunnel.
-
-#### Setup
-
-**1. Server Side:**
-- No extra server configuration is needed.
-- You do **not** need `supervisor-rs-client` installed on the remote machine; only `supervisor-rs-server` needs to be running.
-- You can lock down the server daemon to only listen locally by setting `listener_addr: "127.0.0.1"` in `server.yml` so that external machines cannot reach port `33889` directly.
-
-**2. Client Side:**
-- Ensure you can SSH into the remote machine with key-based authentication.
-- Add your SSH private key to your local SSH-agent:
-  ```bash
-  ssh-add ~/.ssh/id_rsa
-  ```
-- Optional: Add an entry to your `~/.ssh/config` if needed:
-  ```ssh-config
-  Host myserver
-      HostName 192.168.3.3
-      User ubuntu
-      IdentityFile ~/.ssh/id_rsa
-  ```
-
-#### Usage
-
-Specify the target host with the `ssh://username@ipaddress` format:
+This guarantees your continuous deployment step will always succeed without brittle conditional checks.
 
 ```bash
-# Check status of children via SSH tunnel with Noise encryption
-supervisor-rs-client check -o ssh://ubuntu@192.168.3.3 --noise -k ~/.supervisor/client.key
-
-# Check status of children via plain SSH tunnel (server without Noise)
-supervisor-rs-client check -o ssh://ubuntu@192.168.3.3
-
-# Restart a child process via SSH tunnel
-supervisor-rs-client restart child0 -o ssh://ubuntu@192.168.3.3 --noise -k ~/.supervisor/client.key
-
-# [Legacy] preposition syntax:
-supervisor-rs-client restart child0 on ssh://ubuntu@192.168.3.3
+# Safely start or reload your web service during deployment
+supervisor-rs-client trystart web
 ```
 
-### What if accident happens ###
+---
 
-* if supervisor-rs be killed by `kill`, children won't stop, they will be taken by system.
-* if supervisor-rs panic, children won't stop.
+### Fleet Deployment Script (SSH Tunnels)
 
-Go to log to find more information if `supervisor-rs-server` have problem
+You can manage a fleet of servers over SSH without exposing port `33889` on external firewalls. The following bash deployment script updates and verifies an application across multiple remote nodes:
 
-## Cross compiling ##
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
 
-`brew tap filosottile/musl-cross && brew install FiloSottile/musl-cross/musl-cross`
+APP_NAME="web"
+SERVERS=(
+  "ssh://ubuntu@10.0.1.11"
+  "ssh://ubuntu@10.0.1.12"
+  "ssh://ubuntu@10.0.1.13"
+)
 
-after install `musl-cross`, `which x86_64-linux-musl-gcc` will give a result, like `/usr/local/bin/x86_64-linux-musl-gcc`.
+echo "==> Deploying $APP_NAME to server fleet..."
 
-give configuration in `~/.cargo/config`
+for HOST in "${SERVERS[@]}"; do
+  echo "--> Target: $HOST"
 
+  # Idempotently start or restart the service
+  supervisor-rs-client trystart "$APP_NAME" -o "$HOST"
+
+  # Verify the child is healthy and running
+  if supervisor-rs-client check "$APP_NAME" -o "$HOST" | grep -q "$APP_NAME"; then
+    echo "    Status: OK"
+  else
+    echo "    Error: $APP_NAME failed to run on $HOST" >&2
+    exit 1
+  fi
+done
+
+echo "==> Deployment completed successfully across all nodes."
 ```
-[target.x86_64-unknown-linux-musl]
-linker = "x86_64-linux-musl-gcc"
+
+---
+
+### GitHub Actions Workflow Example
+
+Below is an example GitHub Actions workflow (`.github/workflows/deploy.yml`) that deploys a service over an SSH tunnel whenever changes are pushed to `main`:
+
+```yaml
+name: Deploy Production Service
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up SSH Agent
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.PROD_SSH_PRIVATE_KEY }}
+
+      - name: Install supervisor-rs-client
+        run: cargo install supervisor-rs --bin supervisor-rs-client
+
+      - name: Deploy Service via SSH Tunnel
+        env:
+          PROD_HOST: ${{ secrets.PROD_HOST_IP }}
+        run: |
+          # Idempotently deploy application
+          supervisor-rs-client trystart api -o "ssh://ubuntu@$PROD_HOST"
+
+          # Verify service is running
+          supervisor-rs-client check api -o "ssh://ubuntu@$PROD_HOST"
 ```
 
-then, `env CC_x86_64_unknown_linux_musl=x86_64-linux-musl-gcc cargo build --target=x86_64-unknown-linux-musl --release`, there is no errors in my local machine.
+---
 
-## Systemd integration ##
+## Operations & Production Guide
 
-This is the example of `supervisor.service`
+### Crash & Failure Behavior
+
+Understanding process lifecycle boundaries during unexpected events is critical for production operations:
+
+- **Daemon Termination / Kill**: If `supervisor-rs-server` terminates unexpectedly, crashes, or is killed via `supervisor-rs-client kill`, **running child processes are NOT killed**. They are detached and safely reparented to the system init process (PID 1).
+- **Graceful Host Shutdown**: If you need to stop all managed processes before shutting down the daemon or host, issue `stop --all` first:
+  ```bash
+  # 1. Gracefully terminate all child applications
+  supervisor-rs-client stop --all
+
+  # 2. Terminate the supervisor daemon
+  supervisor-rs-client kill
+  ```
+- **Zombie Process Prevention**: Child processes that exit on their own are tracked inside the internal table. Whenever a client executes `check`, `start`, or `restart`, the server automatically reaps defunct processes and clears them from memory.
+
+---
+
+### Log Outlets & Log Rotation (`logrotate`)
+
+`supervisor-rs` separates logging into two distinct outlets:
+
+1. **Daemon Operational Logs**:
+   - The daemon emits timestamped operational messages directly to standard I/O.
+   - When running under Systemd, these messages are automatically routed to the system journal:
+     ```bash
+     journalctl -u supervisor -f
+     ```
+
+2. **Child Process Log Outlets (`stdout` and `stderr`)**:
+   - Each child process routes output directly to configured log files:
+     - `create`: Truncates existing log files upon each start.
+     - `append`: Appends to existing log files without data loss.
+
+#### Managing Child Logs with `logrotate`
+
+Because child processes hold open file descriptors when logging in `append` mode, use `logrotate`'s `copytruncate` directive to rotate logs without requiring service restarts:
+
+Create `/etc/logrotate.d/supervisor`:
+
+```ini
+/var/log/supervisor/*.log {
+    daily
+    missingok
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    copytruncate
+}
+```
+
+---
+
+### Security Hardening & Key Permissions
+
+When deploying in production, ensure strict file permissions on your configuration files and cryptographic keys:
+
+1. **Restrict Private Key Files**:
+   Noise Curve25519 private keys must be accessible only by the process owner:
+   ```bash
+   # On Server
+   chmod 600 /etc/supervisor/server.key
+
+   # On Client
+   chmod 600 ~/.supervisor/client.key
+   ```
+
+2. **Restrict Configuration & Authorized Keys Directories**:
+   Ensure write access to authorized keys is restricted to administrative users:
+   ```bash
+   chmod 700 /etc/supervisor/authorized_clients/
+   chmod 700 ~/.supervisor/authorized_keys/
+   chmod 644 /etc/supervisor/server.yml
+   ```
+
+3. **Run as an Unprivileged Service User**:
+   Do not run `supervisor-rs-server` as `root` unless child processes require privileged network ports (< 1024) or root-level capabilities. Create a dedicated system user and set ownership accordingly.
+
+---
+
+### Systemd Service Integration
+
+To manage `supervisor-rs-server` as a persistent background service, create `/etc/systemd/system/supervisor.service`:
 
 ```ini
 [Unit]
-Description=supervisor
+Description=supervisor-rs process supervisor daemon
 After=network.target
 
 [Service]
+Type=simple
 TimeoutStartSec=0
-ExecStart=/home/ubuntu/.cargo/bin/supervisor-rs-server /home/ubuntu/supervisor/server.yml
-EnvironmentFile=/home/ubuntu/supervisor/supervisor.conf
-StandardOutput=append:/home/ubuntu/supervisor/log
-StandardError=inherit
+ExecStart=/usr/local/bin/supervisor-rs-server /etc/supervisor/server.yml
 Restart=on-failure
+RestartSec=5s
 User=ubuntu
 Group=ubuntu
-RestartSec=5s
+StandardOutput=journal
+StandardError=journal
 
 [Install]
 WantedBy=multi-user.target
+```
+
+Enable and start the service:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now supervisor
+```
+
+---
+
+### Cross-Compiling (musl-cross)
+
+To produce static Linux binaries on macOS:
+
+```bash
+# 1. Install musl-cross via Homebrew
+brew tap filosottile/musl-cross
+brew install FiloSottile/musl-cross/musl-cross
+
+# 2. Configure target linker in ~/.cargo/config
+cat << 'EOF' >> ~/.cargo/config
+[target.x86_64-unknown-linux-musl]
+linker = "x86_64-linux-musl-gcc"
+EOF
+
+# 3. Build static release binaries
+env CC_x86_64_unknown_linux_musl=x86_64-linux-musl-gcc \
+  cargo build --target=x86_64-unknown-linux-musl --release
 ```

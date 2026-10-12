@@ -116,10 +116,7 @@ impl Kindergarten {
 
     /// stop child, and delete it in kg, after this method, do not need delete child
     pub fn stop(&mut self, name: &String) -> Result<()> {
-        // if stop all
-        if name == "all" {
-            return self.stop_all();
-        } else if name == "" {
+        if name == "" {
             return Err(ioError::new(
                 ErrorKind::InvalidData,
                 format!("you have to give which child you want to stop"),
@@ -287,5 +284,31 @@ config detail:
     /// Get all running children names
     pub fn all_running_children(&self) -> Vec<String> {
         self.name_list.keys().cloned().collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_stop_named_all_not_exist() {
+        let mut kg = Kindergarten::new();
+        // Trying to stop child "all" when no such child exists should return an error saying it does not exist,
+        // rather than succeeding as stop_all
+        let res = kg.stop(&"all".to_string());
+        assert!(res.is_err());
+        assert_eq!(res.unwrap_err().to_string(), "all not exsit, cannot stop");
+    }
+
+    #[test]
+    fn test_stop_empty_name() {
+        let mut kg = Kindergarten::new();
+        let res = kg.stop(&"".to_string());
+        assert!(res.is_err());
+        assert_eq!(
+            res.unwrap_err().to_string(),
+            "you have to give which child you want to stop"
+        );
     }
 }
